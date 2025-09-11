@@ -1,0 +1,18 @@
+{
+  "name": "sih-proto-root",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "SIH ocean backend",
+    "SIH ocean hazard/SIH ocean"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c green,cyan \"npm --workspace sih-ocean-backend run dev\" \"npm --workspace sih-ocean run dev\"",
+    "install:all": "npm install --workspaces --no-audit --no-fund"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
+
+
