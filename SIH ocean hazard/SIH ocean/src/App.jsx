@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import "./App.css";
 import Navbar from "../components/navbar";
 import Footer from "../components/footer";
@@ -12,6 +12,17 @@ import { valueContext } from "../counter/counter";
 function App() {
   const [option, setOption] = useState("home");
   const [ogList, setOgList] = useState([]); // ✅ global list state
+  const [currentLang, setCurrentLang] = useState("en"); // en | hi | mr
+
+  // load persisted language on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("app.lang");
+      if (saved) setCurrentLang(saved);
+    } catch (_) {
+      // ignore
+    }
+  }, []);
 
   // Shared refs
   const locationRef = useRef();
@@ -41,7 +52,9 @@ function App() {
         severityRef,
         photoURLRef,
         ogList,
-        setOgList, 
+        setOgList,
+        currentLang,
+        setCurrentLang,
       }}
     >
       <Navbar

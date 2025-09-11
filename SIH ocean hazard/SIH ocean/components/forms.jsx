@@ -1,18 +1,27 @@
 import { useContext } from "react";
 import { valueContext } from "../counter/counter";
+import { guessLang, normalizeLang, t } from "../src/utils/i18n";
 
 export default function InformForm() {
-  const { locationRef, disasterRef, severityRef, photoURLRef, setOgList } =
+  const { locationRef, disasterRef, severityRef, photoURLRef, setOgList, currentLang } =
     useContext(valueContext);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const location = locationRef.current.value.trim();
+    const disaster = disasterRef.current.value.trim();
+    const severity = severityRef.current.value.trim();
+    const photoURL = photoURLRef.current.value.trim();
+
+    const langDetected = guessLang(location || disaster || severity);
+
     const newItem = {
-      location: locationRef.current.value.trim(),
-      disaster: disasterRef.current.value.trim(),
-      severity: severityRef.current.value.trim(),
-      photoURL: photoURLRef.current.value.trim(),
+      location,
+      disaster,
+      severity,
+      photoURL,
+      lang: normalizeLang(langDetected),
     };
 
     // ✅ Only add to list if at least location or disaster is filled
@@ -44,11 +53,11 @@ export default function InformForm() {
         maxWidth: "400px",
       }}
     >
-      <input ref={locationRef} type="text" placeholder="Enter Location" />
-      <input ref={disasterRef} type="text" placeholder="Enter Disaster Type" />
-      <input ref={severityRef} type="text" placeholder="Enter Severity" />
-      <input ref={photoURLRef} type="text" placeholder="Paste Photo URL" />
-      <button type="submit">Submit</button>
+      <input ref={locationRef} type="text" placeholder={t("form_enter_location", currentLang)} />
+      <input ref={disasterRef} type="text" placeholder={t("form_enter_disaster_type", currentLang)} />
+      <input ref={severityRef} type="text" placeholder={t("form_enter_severity", currentLang)} />
+      <input ref={photoURLRef} type="text" placeholder={t("form_paste_photo_url", currentLang)} />
+      <button type="submit">{t("form_submit", currentLang)}</button>
     </form>
   );
 }

@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.heat";
+import { valueContext } from "../counter/counter";
+import { t } from "../src/utils/i18n";
 
 const Map = () => {
+  const { currentLang } = useContext(valueContext);
   const [map, setMap] = useState(null);
   const [query, setQuery] = useState("");
   const [showHeat, setShowHeat] = useState(true);
@@ -256,7 +259,7 @@ const Map = () => {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search for a place"
+          placeholder={t("search_placeholder", currentLang)}
           style={{
             padding: "6px",
             width: "250px",
@@ -276,11 +279,11 @@ const Map = () => {
             borderRadius: "4px",
           }}
         >
-          Search
+          {t("search_button", currentLang)}
         </button>
         {/* Simple quick toggle */}
         <button type="button" onClick={() => setShowHeat((v) => !v)} style={{ padding: "6px 12px", cursor: "pointer" }}>
-          {showHeat ? "Hide Heatmap" : "Show Heatmap"}
+          {showHeat ? t("hide_heatmap", currentLang) : t("show_heatmap", currentLang)}
         </button>
       </form>
 
@@ -298,22 +301,22 @@ const Map = () => {
           minWidth: "220px",
         }}
       >
-        <div style={{ fontWeight: 600, marginBottom: "6px" }}>openstreetmap</div>
+        <div style={{ fontWeight: 600, marginBottom: "6px" }}>{t("layer_panel_title", currentLang)}</div>
         <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
           <input type="checkbox" checked={showPoints} onChange={(e) => setShowPoints(e.target.checked)} />
-          Hazard Points
+          {t("layer_hazard_points", currentLang)}
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
           <input type="checkbox" checked={showHeat} onChange={(e) => setShowHeat(e.target.checked)} />
-          Heatmap
+          {t("layer_heatmap", currentLang)}
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
           <input type="checkbox" checked={showDbscan} onChange={(e) => setShowDbscan(e.target.checked)} />
-          DBSCAN Clusters
+          {t("layer_dbscan", currentLang)}
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: 0 }}>
           <input type="checkbox" checked={showHotspots} onChange={(e) => setShowHotspots(e.target.checked)} />
-          Hotspots (Gi*)
+          {t("layer_hotspots", currentLang)}
         </label>
       </div>
 
