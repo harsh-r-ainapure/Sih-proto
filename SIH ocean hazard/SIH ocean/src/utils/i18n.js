@@ -12,7 +12,7 @@ const UI_STRINGS = {
   en: {
     app_title: "Ocean Hazard",
     nav_home: "Home",
-    nav_inform: "Inform",
+    nav_inform: "Report Incident",
     nav_latest: "Latest",
     nav_social_media: "Social Media",
     nav_instagram: "Instagram",
@@ -45,6 +45,16 @@ const UI_STRINGS = {
     footer_about: "About",
     footer_settings: "Settings",
     language: "Language",
+
+    report_title: "Report Incident",
+    report_upload_image: "Upload image",
+    report_city: "City",
+    report_short_desc: "Short description",
+    report_long_desc: "Long description (optional)",
+    report_name: "Your name",
+    report_time: "Time",
+    report_cancel: "Cancel",
+    report_submit: "Submit",
   },
   hi: {
     app_title: "महासागर खतरा",
@@ -82,6 +92,16 @@ const UI_STRINGS = {
     footer_about: "परिचय",
     footer_settings: "सेटिंग्स",
     language: "भाषा",
+
+    report_title: "घटना रिपोर्ट करें",
+    report_upload_image: "छवि अपलोड करें",
+    report_city: "शहर",
+    report_short_desc: "संक्षिप्त विवरण",
+    report_long_desc: "विस्तृत व��वरण (वैकल्पिक)",
+    report_name: "आपका नाम",
+    report_time: "समय",
+    report_cancel: "रद्द करें",
+    report_submit: "सबमिट",
   },
   mr: {
     app_title: "समुद्र धोका",
@@ -119,6 +139,16 @@ const UI_STRINGS = {
     footer_about: "माहिती",
     footer_settings: "सेटिंग्ज",
     language: "भाषा",
+
+    report_title: "घटना रिपोर्ट करा",
+    report_upload_image: "प्रतिमा अपलोड करा",
+    report_city: "शहर",
+    report_short_desc: "संक्षिप्त वर्णन",
+    report_long_desc: "सविस्तर वर्णन (पर्यायी)",
+    report_name: "तुमचे नाव",
+    report_time: "वेळ",
+    report_cancel: "रद्द करा",
+    report_submit: "सबमिट",
   },
 };
 

@@ -304,11 +304,7 @@ const Map = () => {
         <button type="button" onClick={() => setShowHeat((v) => !v)} style={{ padding: "6px 12px", cursor: "pointer" }}>
           {showHeat ? t("hide_heatmap", currentLang) : t("show_heatmap", currentLang)}
         </button>
-        {/* Simple quick toggle */}
-        <button type="button" onClick={() => setShowHeat((v) => !v)} style={{ padding: "6px 12px", cursor: "pointer" }}>
-          {showHeat ? "Hide Heatmap" : "Show Heatmap"}
-        </button>
-      </form>
+              </form>
 
       {/* Right-side layer checkboxes */}
       <div
