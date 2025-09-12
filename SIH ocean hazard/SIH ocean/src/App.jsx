@@ -99,6 +99,9 @@ function App() {
     return null;
   };
 
+  console.log("VITE_WEATHERAPI_KEY:", import.meta.env.VITE_WEATHERAPI_KEY);
+
+
   return (
     <valueContext.Provider
       value={{
