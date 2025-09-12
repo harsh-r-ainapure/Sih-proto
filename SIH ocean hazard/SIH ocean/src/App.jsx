@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import "./App.css";
 import Navbar from "../components/navbar";
 import Footer from "../components/footer";
 import Home from "../components/home";
 import Instagram from "../components/instagram";
 import MyPosts from "../components/myposts";
+import Reddit from "../components/reddit";
 import { valueContext } from "../counter/counter";
 import { t } from "./utils/i18n";
 import exifr from "exifr";
@@ -91,11 +91,13 @@ function App() {
   const onclickform = () => setReportOpen(true);
   const onclickinsta = () => setOption("instagram");
   const onclickmypost = () => setOption("myPost");
+  const onclickreddit = () => setOption("reddit");
 
   const MyComponent = () => {
     if (option === "home") return <Home />;
     if (option === "instagram") return <Instagram />;
     if (option === "myPost") return <MyPosts />;
+    if (option === "reddit") return <Reddit />;
     return null;
   };
 
@@ -119,8 +121,9 @@ function App() {
         onclickform={onclickform}
         onclickhome={onclickhome}
         onclickinsta={onclickinsta}
+        onclickreddit={onclickreddit}
       />
-      <div style={{ padding: "20px", marginTop: 64 }}>
+      <div style={{ padding: "20px", marginTop: 64, minHeight: "calc(100vh - 200px)" }}>
         <MyComponent />
       </div>
 

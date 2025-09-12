@@ -256,8 +256,8 @@ const Map = () => {
   };
 
   return (
-    <div style={{ position: "relative", height: "100vh", width: "100vw" }}>
-      {/* Floating controls */}
+    <div style={{ position: "relative", height: "calc(100vh - 200px)", width: "100%" }}>
+      {/* Floating controls - Mobile responsive */}
       <form
         onSubmit={handleSearch}
         style={{
@@ -272,7 +272,10 @@ const Map = () => {
           borderRadius: "8px",
           boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
           zIndex: 1000,
+          maxWidth: "calc(100vw - 32px)",
+          flexWrap: "wrap",
         }}
+        className="d-none d-md-flex"
       >
         <input
           type="text"
@@ -281,7 +284,8 @@ const Map = () => {
           placeholder={t("search_placeholder", currentLang)}
           style={{
             padding: "6px",
-            width: "250px",
+            width: "200px",
+            minWidth: "150px",
             border: "1px solid #ccc",
             borderRadius: "4px",
             outline: "none",
@@ -296,54 +300,132 @@ const Map = () => {
             color: "#fff",
             border: "none",
             borderRadius: "4px",
+            whiteSpace: "nowrap",
           }}
         >
           {t("search_button", currentLang)}
         </button>
-        {/* Simple quick toggle */}
-        <button type="button" onClick={() => setShowHeat((v) => !v)} style={{ padding: "6px 12px", cursor: "pointer" }}>
-          {showHeat ? t("hide_heatmap", currentLang) : t("show_heatmap", currentLang)}
-        </button>
-              </form>
+      </form>
 
-      {/* Right-side layer checkboxes */}
+      {/* Layer controls - Mobile responsive dropdown */}
       <div
+        className="dropdown"
         style={{
           position: "absolute",
-          top: "90px",
+          top: "20px",
           right: "20px",
-          background: "rgba(255,255,255,0.9)",
-          padding: "10px 12px",
-          borderRadius: "8px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
           zIndex: 1000,
-          minWidth: "220px",
         }}
       >
-        <div style={{ fontWeight: 600, marginBottom: "6px" }}>openstreetmap</div>
-        <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-          <input type="checkbox" checked={showPoints} onChange={(e) => setShowPoints(e.target.checked)} />
-          Hazard Points
-        </label>
-        <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-          <input type="checkbox" checked={showHeat} onChange={(e) => setShowHeat(e.target.checked)} />
-          Heatmap
-        </label>
-        <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-          <input type="checkbox" checked={showDbscan} onChange={(e) => setShowDbscan(e.target.checked)} />
-          Cluster Areas (DBSCAN)
-        </label>
-        <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: 0 }}>
-          <input type="checkbox" checked={showHotspots} onChange={(e) => setShowHotspots(e.target.checked)} />
-          Hotspots (15km radius)
-        </label>
+        <button
+          className="btn btn-light dropdown-toggle"
+          type="button"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+          style={{
+            background: "rgba(255,255,255,0.9)",
+            border: "1px solid #ddd",
+            borderRadius: "8px",
+            padding: "8px 12px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+            fontSize: "14px",
+            fontWeight: "600",
+          }}
+        >
+          Map Layers
+        </button>
+        <ul className="dropdown-menu dropdown-menu-end" style={{ minWidth: "250px" }}>
+          <li style={{ padding: "8px 16px", borderBottom: "1px solid #eee" }}>
+            <div style={{ fontWeight: "600", color: "#333", fontSize: "12px", textTransform: "uppercase" }}>
+              OpenStreetMap Layers
+            </div>
+          </li>
+          <li>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
+              <input type="checkbox" checked={showPoints} onChange={(e) => setShowPoints(e.target.checked)} />
+              <span>Hazard Points</span>
+            </label>
+          </li>
+          <li>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
+              <input type="checkbox" checked={showHeat} onChange={(e) => setShowHeat(e.target.checked)} />
+              <span>Heatmap</span>
+            </label>
+          </li>
+          <li>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
+              <input type="checkbox" checked={showDbscan} onChange={(e) => setShowDbscan(e.target.checked)} />
+              <span>Cluster Areas (DBSCAN)</span>
+            </label>
+          </li>
+          <li>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
+              <input type="checkbox" checked={showHotspots} onChange={(e) => setShowHotspots(e.target.checked)} />
+              <span>Hotspots (15km radius)</span>
+            </label>
+          </li>
+        </ul>
       </div>
+
+      {/* Mobile search controls at bottom */}
+      <form
+        onSubmit={handleSearch}
+        className="d-md-none"
+        style={{
+          position: "absolute",
+          bottom: "60px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          display: "flex",
+          gap: "8px",
+          background: "rgba(255, 255, 255, 0.95)",
+          padding: "12px 16px",
+          borderRadius: "12px",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+          zIndex: 1000,
+          maxWidth: "calc(100vw - 32px)",
+          width: "90%",
+          alignItems: "center",
+        }}
+      >
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("search_placeholder", currentLang)}
+          style={{
+            flex: 1,
+            padding: "10px 12px",
+            border: "1px solid #ddd",
+            borderRadius: "8px",
+            outline: "none",
+            fontSize: "16px",
+            minWidth: "120px",
+          }}
+        />
+        <button
+          type="submit"
+          style={{
+            padding: "10px 16px",
+            cursor: "pointer",
+            backgroundColor: "#007BFF",
+            color: "#fff",
+            border: "none",
+            borderRadius: "8px",
+            fontSize: "14px",
+            fontWeight: "600",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {t("search_button", currentLang)}
+        </button>
+      </form>
 
       {/* Fullscreen map */}
       <div
         id="map"
         style={{
-          height: "100%",
+          height: "calc(100vh - 200px)",
           width: "100%",
           position: "absolute",
           top: 0,

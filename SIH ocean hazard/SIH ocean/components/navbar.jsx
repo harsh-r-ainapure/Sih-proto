@@ -2,7 +2,7 @@ import { useContext } from "react";
 import { valueContext } from "../counter/counter";
 import { t } from "../src/utils/i18n";
 
-const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
+const Navbar = ({ onclickhome,  onclickform, onclickinsta, onclickreddit }) => {
   const { currentLang } = useContext(valueContext);
   return (
     <nav
@@ -137,7 +137,8 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
                       onMouseOut={(e) => (e.target.style.color = "black")}
                       onClick={() => {
                         if (platform === "Instagram") onclickinsta();
-                        // Add handlers for X and Reddit here if needed
+                        if (platform === "Reddit") onclickreddit();
+                        // Add handlers for X here if needed
                       }}
                     >
                       {platform === "Instagram" ? t("nav_instagram", currentLang) : platform === "X" ? t("nav_x", currentLang) : t("nav_reddit", currentLang)}
@@ -148,44 +149,73 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
             </li>
           </ul>
 
-          {/* Search */}
-          <form className="d-flex" role="search">
-            <input
-              className="form-control me-2"
-              type="search"
-              placeholder={t("search_button", currentLang)}
-              aria-label="Search"
-              style={{
-                borderRadius: "20px",
-                padding: "5px 15px",
-                border: "1px solid white",
-                backgroundColor: "rgba(255,255,255,0.9)",
-              }}
-            />
+          {/* Search - Mobile responsive */}
+          <div className="d-flex align-items-center">
+            {/* Desktop Search */}
+            <form className="d-none d-md-flex" role="search">
+              <input
+                className="form-control me-2"
+                type="search"
+                placeholder={t("search_button", currentLang)}
+                aria-label="Search"
+                style={{
+                  borderRadius: "20px",
+                  padding: "5px 15px",
+                  border: "1px solid white",
+                  backgroundColor: "rgba(255,255,255,0.9)",
+                }}
+              />
+              <button
+                className="btn"
+                type="submit"
+                style={{
+                  borderRadius: "20px",
+                  backgroundColor: "white",
+                  color: "#007BFF",
+                  fontWeight: "bold",
+                  border: "none",
+                  padding: "5px 15px",
+                  transition: "all 0.3s ease",
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.backgroundColor = "#FFD700";
+                  e.target.style.color = "#0056b3";
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.backgroundColor = "white";
+                  e.target.style.color = "#007BFF";
+                }}
+              >
+                {t("search_button", currentLang)}
+              </button>
+            </form>
+            
+            {/* Mobile Search Icon */}
             <button
-              className="btn"
-              type="submit"
+              className="btn d-md-none"
+              type="button"
               style={{
-                borderRadius: "20px",
-                backgroundColor: "white",
-                color: "#007BFF",
-                fontWeight: "bold",
+                backgroundColor: "transparent",
+                color: "white",
                 border: "none",
-                padding: "5px 15px",
+                fontSize: "1.2rem",
+                padding: "8px",
+                borderRadius: "50%",
                 transition: "all 0.3s ease",
               }}
               onMouseOver={(e) => {
-                e.target.style.backgroundColor = "#FFD700";
-                e.target.style.color = "#0056b3";
+                e.target.style.backgroundColor = "rgba(255,255,255,0.2)";
+                e.target.style.color = "#FFD700";
               }}
               onMouseOut={(e) => {
-                e.target.style.backgroundColor = "white";
-                e.target.style.color = "#007BFF";
+                e.target.style.backgroundColor = "transparent";
+                e.target.style.color = "white";
               }}
+              title={t("search_button", currentLang)}
             >
-              {t("search_button", currentLang)}
+              🔍
             </button>
-          </form>
+          </div>
         </div>
       </div>
     </nav>
