@@ -137,39 +137,58 @@ const Map = () => {
     const clusterIds = dbscan(hazardPoints, 60, 2);
     const dbscanLayer = L.layerGroup();
     const palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
+
+    // Compute convex hull (monotonic chain) for each cluster and draw polygon areas
+    function convexHullLatLng(points) {
+      if (points.length <= 1) return points.map((p) => [p.lat, p.lon]);
+      const pts = points.map((p) => ({ x: p.lon, y: p.lat, ref: p })).sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+      const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+      const lower = [];
+      for (const p of pts) {
+        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+        lower.push(p);
+      }
+      const upper = [];
+      for (let i = pts.length - 1; i >= 0; i--) {
+        const p = pts[i];
+        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+        upper.push(p);
+      }
+      const hull = lower.slice(0, lower.length - 1).concat(upper.slice(0, upper.length - 1));
+      return hull.map((p) => [p.y, p.x]);
+    }
+
+    const cidToPoints = new globalThis.Map();
     clusterIds.forEach((cid, idx) => {
-      const p = hazardPoints[idx];
-      const color = cid >= 0 ? palette[cid % palette.length] : "#777";
-      L.circleMarker([p.lat, p.lon], { radius: 6, color, weight: 2, fillOpacity: 0.7 })
-        .bindPopup(cid >= 0 ? `Cluster #${cid}` : "Noise")
+      if (cid < 0) return; // skip noise for polygon areas
+      if (!cidToPoints.has(cid)) cidToPoints.set(cid, []);
+      cidToPoints.get(cid).push(hazardPoints[idx]);
+    });
+
+    cidToPoints.forEach((pts, cid) => {
+      if (pts.length === 1) {
+        const p = pts[0];
+        const color = palette[cid % palette.length];
+        L.circleMarker([p.lat, p.lon], { radius: 6, color, weight: 2, fillOpacity: 0.7 })
+          .bindPopup(`Cluster #${cid}`)
+          .addTo(dbscanLayer);
+        return;
+      }
+      const latlngs = convexHullLatLng(pts);
+      const color = palette[cid % palette.length];
+      L.polygon(latlngs, { color, weight: 2, fillOpacity: 0.15 })
+        .bindPopup(`Cluster #${cid} (area)`)
         .addTo(dbscanLayer);
     });
 
-    // Hotspots (Gi*-like approximation using neighborhood counts and z-scores)
-    function neighborCounts(points, radiusKm) {
-      const counts = new Array(points.length).fill(0);
-      for (let i = 0; i < points.length; i++) {
-        for (let j = 0; j < points.length; j++) {
-          if (haversineKm(points[i], points[j]) <= radiusKm) counts[i]++;
-        }
-      }
-      return counts;
-    }
-    const counts = neighborCounts(hazardPoints, 80);
-    const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
-    const variance = counts.reduce((a, b) => a + (b - mean) ** 2, 0) / counts.length;
-    const std = Math.sqrt(variance) || 1;
-    const zscores = counts.map((c) => (c - mean) / std);
+   // Hotspots: fixed 15km radius around each hazard point
     const hotspotsLayer = L.layerGroup();
-    zscores.forEach((z, idx) => {
-      const p = hazardPoints[idx];
-      let color = "#1a9641";
-      if (z >= 2.0) color = "#d7191c";
-      else if (z >= 1.3) color = "#fdae61";
-      else if (z >= 0.5) color = "#ffff33";
-      L.circle([p.lat, p.lon], { radius: 12000 + Math.max(0, z) * 6000, color, weight: 2, fillOpacity: 0.15 })
-        .bindPopup(`Gi* z-score: ${z.toFixed(2)}`)
-        .addTo(hotspotsLayer);
+    hazardPoints.forEach((p) => {
+      const ratio = p.report_count / max_count;
+      const color = ratio >= 0.75 ? "#d7191c" : ratio >= 0.5 ? "#fdae61" : ratio >= 0.25 ? "#ffff33" : "#1a9641";
+      L.circle([p.lat, p.lon], { radius: 5000, color, weight: 2, fillOpacity: 0.15 })
+        .bindPopup(`Hotspot radius 15km\nIntensity: ${p.report_count}`)
+       .addTo(hotspotsLayer);
     });
 
     // Initial visibility based on toggle state
@@ -285,6 +304,10 @@ const Map = () => {
         <button type="button" onClick={() => setShowHeat((v) => !v)} style={{ padding: "6px 12px", cursor: "pointer" }}>
           {showHeat ? t("hide_heatmap", currentLang) : t("show_heatmap", currentLang)}
         </button>
+        {/* Simple quick toggle */}
+        <button type="button" onClick={() => setShowHeat((v) => !v)} style={{ padding: "6px 12px", cursor: "pointer" }}>
+          {showHeat ? "Hide Heatmap" : "Show Heatmap"}
+        </button>
       </form>
 
       {/* Right-side layer checkboxes */}
@@ -301,22 +324,22 @@ const Map = () => {
           minWidth: "220px",
         }}
       >
-        <div style={{ fontWeight: 600, marginBottom: "6px" }}>{t("layer_panel_title", currentLang)}</div>
+        <div style={{ fontWeight: 600, marginBottom: "6px" }}>openstreetmap</div>
         <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
           <input type="checkbox" checked={showPoints} onChange={(e) => setShowPoints(e.target.checked)} />
-          {t("layer_hazard_points", currentLang)}
+          Hazard Points
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
           <input type="checkbox" checked={showHeat} onChange={(e) => setShowHeat(e.target.checked)} />
-          {t("layer_heatmap", currentLang)}
+          Heatmap
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
           <input type="checkbox" checked={showDbscan} onChange={(e) => setShowDbscan(e.target.checked)} />
-          {t("layer_dbscan", currentLang)}
+          Cluster Areas (DBSCAN)
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: 0 }}>
           <input type="checkbox" checked={showHotspots} onChange={(e) => setShowHotspots(e.target.checked)} />
-          {t("layer_hotspots", currentLang)}
+          Hotspots (15km radius)
         </label>
       </div>
 
