@@ -1,7 +1,18 @@
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
+import { useContext } from "react";
+import { valueContext } from "../counter/counter";
+import { getSupportedLangs, persistLang, t } from "../src/utils/i18n";
 
 const Footer = ({ onclickmypost }) => {
+  const { currentLang, setCurrentLang } = useContext(valueContext);
+  const langs = getSupportedLangs();
+
+  const changeLang = (code) => {
+    setCurrentLang(code);
+    try { persistLang(code); } catch (_) {}
+  };
+
   return (
     <footer
       style={{
@@ -31,28 +42,52 @@ const Footer = ({ onclickmypost }) => {
           marginBottom: "10px",
         }}
       >
-        {[ "My Posts", "Language/भाषा", "FAQs", "About"].map((item, index) => (
-          <li key={index} style={{ margin: "0 10px" }}>
-            <a
-              href="#"
-              style={{
-                color: "white",
-                textDecoration: "none",
-                fontWeight: "500",
-                transition: "color 0.3s ease",
-              }}
-              onMouseOver={(e) => (e.target.style.color = "#FFD700")}
-              onMouseOut={(e) => (e.target.style.color = "white")}
-              onClick={()=>{
-                if (item=="My Posts") {
-                  onclickmypost();
-                }
-              }}
-            >
-              {item}
-            </a>
-          </li>
-        ))}
+        <li style={{ margin: "0 10px" }}>
+          <a
+            href="#"
+            style={{
+              color: "white",
+              textDecoration: "none",
+              fontWeight: "500",
+              transition: "color 0.3s ease",
+            }}
+            onMouseOver={(e) => (e.target.style.color = "#FFD700")}
+            onMouseOut={(e) => (e.target.style.color = "white")}
+            onClick={() => onclickmypost()}
+          >
+            {t("footer_my_posts", currentLang)}
+          </a>
+        </li>
+        <li style={{ margin: "0 10px" }}>
+          <a
+            href="#"
+            style={{
+              color: "white",
+              textDecoration: "none",
+              fontWeight: "500",
+              transition: "color 0.3s ease",
+            }}
+            onMouseOver={(e) => (e.target.style.color = "#FFD700")}
+            onMouseOut={(e) => (e.target.style.color = "white")}
+          >
+            {t("footer_faqs", currentLang)}
+          </a>
+        </li>
+        <li style={{ margin: "0 10px" }}>
+          <a
+            href="#"
+            style={{
+              color: "white",
+              textDecoration: "none",
+              fontWeight: "500",
+              transition: "color 0.3s ease",
+            }}
+            onMouseOver={(e) => (e.target.style.color = "#FFD700")}
+            onMouseOut={(e) => (e.target.style.color = "white")}
+          >
+            {t("footer_about", currentLang)}
+          </a>
+        </li>
 
         {/* Social Media Dropdown */}
         <li className="nav-item dropdown">
@@ -69,7 +104,7 @@ const Footer = ({ onclickmypost }) => {
             onMouseOver={(e) => (e.target.style.color = "#FFD700")}
             onMouseOut={(e) => (e.target.style.color = "white")}
           >
-            Settings
+            {t("footer_settings", currentLang)}
           </button>
           <ul className="dropdown-menu">
             {["Dark"].map((platform, index) => (
@@ -80,14 +115,11 @@ const Footer = ({ onclickmypost }) => {
                     color: "black",
                     fontWeight: "500",
                     textDecoration: "none",
-                    backgroundColor: "orange"
+                    backgroundColor: "orange",
                   }}
                   onMouseOver={(e) => (e.target.style.color = "black")}
                   onMouseOut={(e) => (e.target.style.color = "gray")}
-                  onClick={() => {
-                    
-                    
-                  }}
+                  onClick={() => {}}
                 >
                   {platform}
                 </button>
@@ -96,6 +128,35 @@ const Footer = ({ onclickmypost }) => {
           </ul>
         </li>
       </ul>
+
+      {/* Language dropdown in bottom-right */}
+      <div
+        className="dropdown"
+        style={{
+          position: "fixed",
+          right: "16px",
+          bottom: "70px",
+        }}
+      >
+        <button
+          className="btn btn-light dropdown-toggle"
+          type="button"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+          title={t("language", currentLang)}
+        >
+          {t("language", currentLang)}: {langs[currentLang]?.label || currentLang.toUpperCase()}
+        </button>
+        <ul className="dropdown-menu dropdown-menu-end">
+          {Object.entries(langs).map(([code, meta]) => (
+            <li key={code}>
+              <button className="dropdown-item" onClick={() => changeLang(code)}>
+                {meta.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       {/* Copyright */}
       <p style={{ margin: 0, fontSize: "14px" }}>© 2024 Company, Inc</p>

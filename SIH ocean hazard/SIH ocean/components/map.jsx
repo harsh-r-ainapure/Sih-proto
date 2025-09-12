@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.heat";
+import { valueContext } from "../counter/counter";
+import { t } from "../src/utils/i18n";
 
 const Map = () => {
+  const { currentLang } = useContext(valueContext);
   const [map, setMap] = useState(null);
   const [query, setQuery] = useState("");
   const [showHeat, setShowHeat] = useState(true);
@@ -185,7 +188,7 @@ const Map = () => {
       const color = ratio >= 0.75 ? "#d7191c" : ratio >= 0.5 ? "#fdae61" : ratio >= 0.25 ? "#ffff33" : "#1a9641";
       L.circle([p.lat, p.lon], { radius: 5000, color, weight: 2, fillOpacity: 0.15 })
         .bindPopup(`Hotspot radius 15km\nIntensity: ${p.report_count}`)
-        .addTo(hotspotsLayer);
+       .addTo(hotspotsLayer);
     });
 
     // Initial visibility based on toggle state
@@ -275,7 +278,7 @@ const Map = () => {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search for a place"
+          placeholder={t("search_placeholder", currentLang)}
           style={{
             padding: "6px",
             width: "250px",
@@ -295,7 +298,11 @@ const Map = () => {
             borderRadius: "4px",
           }}
         >
-          Search
+          {t("search_button", currentLang)}
+        </button>
+        {/* Simple quick toggle */}
+        <button type="button" onClick={() => setShowHeat((v) => !v)} style={{ padding: "6px 12px", cursor: "pointer" }}>
+          {showHeat ? t("hide_heatmap", currentLang) : t("show_heatmap", currentLang)}
         </button>
         {/* Simple quick toggle */}
         <button type="button" onClick={() => setShowHeat((v) => !v)} style={{ padding: "6px 12px", cursor: "pointer" }}>

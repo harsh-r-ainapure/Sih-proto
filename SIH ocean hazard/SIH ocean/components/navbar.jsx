@@ -1,4 +1,9 @@
+import { useContext } from "react";
+import { valueContext } from "../counter/counter";
+import { t } from "../src/utils/i18n";
+
 const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
+  const { currentLang } = useContext(valueContext);
   return (
     <nav
       className="navbar navbar-expand-lg"
@@ -24,7 +29,7 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
             color: "white",
           }}
         >
-          Ocean Hazard
+          {t("app_title", currentLang)}
         </a>
 
         <button
@@ -56,7 +61,7 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
                 onMouseOver={(e) => (e.target.style.color = "#FFD700")}
                 onMouseOut={(e) => (e.target.style.color = "white")}
               >
-                Home
+                {t("nav_home", currentLang)}
               </button>
             </li>
 
@@ -76,7 +81,7 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
                 onMouseOver={(e) => (e.target.style.color = "#FFD700")}
                 onMouseOut={(e) => (e.target.style.color = "white")}
               >
-                Inform
+                {t("nav_inform", currentLang)}
               </button>
             </li>
 
@@ -93,7 +98,7 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
                 onMouseOver={(e) => (e.target.style.color = "#FFD700")}
                 onMouseOut={(e) => (e.target.style.color = "white")}
               >
-                Latest
+                {t("nav_latest", currentLang)}
               </button>
             </li>
 
@@ -113,7 +118,7 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
                 onMouseOver={(e) => (e.target.style.color = "#FFD700")}
                 onMouseOut={(e) => (e.target.style.color = "white")}
               >
-                Social Media
+                {t("nav_social_media", currentLang)}
               </button>
               <ul className="dropdown-menu">
                 {["Instagram", "X", "Reddit"].map((platform, index) => (
@@ -135,7 +140,7 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
                         // Add handlers for X and Reddit here if needed
                       }}
                     >
-                      {platform}
+                      {platform === "Instagram" ? t("nav_instagram", currentLang) : platform === "X" ? t("nav_x", currentLang) : t("nav_reddit", currentLang)}
                     </button>
                   </li>
                 ))}
@@ -148,7 +153,7 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
             <input
               className="form-control me-2"
               type="search"
-              placeholder="Search"
+              placeholder={t("search_button", currentLang)}
               aria-label="Search"
               style={{
                 borderRadius: "20px",
@@ -178,7 +183,7 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta }) => {
                 e.target.style.color = "#007BFF";
               }}
             >
-              Search
+              {t("search_button", currentLang)}
             </button>
           </form>
         </div>
