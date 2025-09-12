@@ -8,7 +8,6 @@ import { t } from "../src/utils/i18n";
 const Map = () => {
   const { currentLang } = useContext(valueContext);
   const [map, setMap] = useState(null);
-  const [query, setQuery] = useState("");
   const [showHeat, setShowHeat] = useState(true);
   const [showPoints, setShowPoints] = useState(true);
   const [showDbscan, setShowDbscan] = useState(true);
@@ -213,99 +212,35 @@ const Map = () => {
 
     setMap(leafletMap);
 
-    return () => {
-      leafletMap.remove();
-    };
-  }, [showHeat, showPoints, showDbscan, showHotspots]);
-
-  
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    if (!query.trim() || !map) return;
-
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          query
-        )}`,
-        {
-          headers: {
-            "User-Agent": "SIH-Ocean-Hazard/1.0 (your@email.com)",
-            "Accept-Language": "en",
-          },
-        }
-      );
-
-      const data = await response.json();
-      if (data.length > 0) {
-        const { lat, lon, display_name } = data[0];
+    // Listen for search events from navbar
+    const handleMapSearch = (event) => {
+      try {
+        const { lat, lon, display_name } = event.detail;
         const latNum = parseFloat(lat);
         const lonNum = parseFloat(lon);
 
-        map.setView([latNum, lonNum], 14);
+        leafletMap.setView([latNum, lonNum], 14);
         L.marker([latNum, lonNum])
-          .addTo(map)
+          .addTo(leafletMap)
           .bindPopup(`<b>${display_name}</b>`)
           .openPopup();
-      } else {
-        alert("No results found.");
+      } catch (error) {
+        console.error("Error processing search data:", error);
       }
-    } catch (err) {
-      console.error("Error fetching location:", err);
-    }
-  };
+    };
+
+    // Add event listener for search
+    window.addEventListener('mapSearch', handleMapSearch);
+
+    return () => {
+      leafletMap.remove();
+      window.removeEventListener('mapSearch', handleMapSearch);
+    };
+  }, [showHeat, showPoints, showDbscan, showHotspots]);
+
 
   return (
     <div style={{ position: "relative", height: "calc(100vh - 200px)", width: "100%" }}>
-      {/* Floating controls - Mobile responsive */}
-      <form
-        onSubmit={handleSearch}
-        style={{
-          position: "absolute",
-          top: "20px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          display: "flex",
-          gap: "8px",
-          background: "rgba(255, 255, 255, 0.85)",
-          padding: "8px 12px",
-          borderRadius: "8px",
-          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
-          zIndex: 1000,
-          maxWidth: "calc(100vw - 32px)",
-          flexWrap: "wrap",
-        }}
-        className="d-none d-md-flex"
-      >
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t("search_placeholder", currentLang)}
-          style={{
-            padding: "6px",
-            width: "200px",
-            minWidth: "150px",
-            border: "1px solid #ccc",
-            borderRadius: "4px",
-            outline: "none",
-          }}
-        />
-        <button
-          type="submit"
-          style={{
-            padding: "6px 12px",
-            cursor: "pointer",
-            backgroundColor: "#007BFF",
-            color: "#fff",
-            border: "none",
-            borderRadius: "4px",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {t("search_button", currentLang)}
-        </button>
-      </form>
 
       {/* Layer controls - Mobile responsive dropdown */}
       <div
@@ -367,59 +302,6 @@ const Map = () => {
         </ul>
       </div>
 
-      {/* Mobile search controls at bottom */}
-      <form
-        onSubmit={handleSearch}
-        className="d-md-none"
-        style={{
-          position: "absolute",
-          bottom: "60px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          display: "flex",
-          gap: "8px",
-          background: "rgba(255, 255, 255, 0.95)",
-          padding: "12px 16px",
-          borderRadius: "12px",
-          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
-          zIndex: 1000,
-          maxWidth: "calc(100vw - 32px)",
-          width: "90%",
-          alignItems: "center",
-        }}
-      >
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t("search_placeholder", currentLang)}
-          style={{
-            flex: 1,
-            padding: "10px 12px",
-            border: "1px solid #ddd",
-            borderRadius: "8px",
-            outline: "none",
-            fontSize: "16px",
-            minWidth: "120px",
-          }}
-        />
-        <button
-          type="submit"
-          style={{
-            padding: "10px 16px",
-            cursor: "pointer",
-            backgroundColor: "#007BFF",
-            color: "#fff",
-            border: "none",
-            borderRadius: "8px",
-            fontSize: "14px",
-            fontWeight: "600",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {t("search_button", currentLang)}
-        </button>
-      </form>
 
       {/* Fullscreen map */}
       <div

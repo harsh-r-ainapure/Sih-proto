@@ -1,9 +1,45 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { valueContext } from "../counter/counter";
 import { t } from "../src/utils/i18n";
 
 const Navbar = ({ onclickhome,  onclickform, onclickinsta, onclickreddit }) => {
   const { currentLang } = useContext(valueContext);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const searchLocation = async (query) => {
+    if (!query.trim()) return;
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`
+      );
+      const data = await response.json();
+      if (data.length > 0) {
+        const { lat, lon, display_name } = data[0];
+        // Navigate to home page first
+        onclickhome();
+        // Dispatch custom event with search data
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('mapSearch', { 
+            detail: { lat, lon, display_name } 
+          }));
+        }, 100);
+        // Clear the search input
+        setSearchQuery("");
+      } else {
+        alert("No results found.");
+      }
+    } catch (err) {
+      console.error("Error fetching location:", err);
+      alert("Error searching for location.");
+    }
+  };
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    await searchLocation(searchQuery);
+  };
+
   return (
     <nav
       className="navbar navbar-expand-lg"
@@ -152,10 +188,12 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta, onclickreddit }) => {
           {/* Search - Mobile responsive */}
           <div className="d-flex align-items-center">
             {/* Desktop Search */}
-            <form className="d-none d-md-flex" role="search">
+            <form className="d-none d-md-flex" role="search" onSubmit={handleSearch}>
               <input
                 className="form-control me-2"
                 type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t("search_button", currentLang)}
                 aria-label="Search"
                 style={{
@@ -194,6 +232,14 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta, onclickreddit }) => {
             <button
               className="btn d-md-none"
               type="button"
+              onClick={() => {
+                const query = prompt("Enter location to search:");
+                if (query && query.trim()) {
+                  setSearchQuery(query);
+                  // Trigger search directly
+                  searchLocation(query);
+                }
+              }}
               style={{
                 backgroundColor: "transparent",
                 color: "white",
