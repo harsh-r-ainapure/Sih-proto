@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import "./App.css";
 import Navbar from "../components/navbar";
 import Footer from "../components/footer";
@@ -8,6 +8,60 @@ import MyPosts from "../components/myposts";
 import { valueContext } from "../counter/counter";
 import { t } from "./utils/i18n";
 import exifr from "exifr";
+import { CITIES_BY_STATE, getAllCities } from "./utils/indiaCities";
+
+const IN_CITIES = [
+  "Mumbai",
+  "Delhi",
+  "Bengaluru",
+  "Hyderabad",
+  "Ahmedabad",
+  "Chennai",
+  "Kolkata",
+  "Surat",
+  "Pune",
+  "Jaipur",
+  "Lucknow",
+  "Kanpur",
+  "Nagpur",
+  "Indore",
+  "Thane",
+  "Bhopal",
+  "Visakhapatnam",
+  "Pimpri-Chinchwad",
+  "Patna",
+  "Vadodara",
+  "Ghaziabad",
+  "Ludhiana",
+  "Agra",
+  "Nashik",
+  "Faridabad",
+  "Meerut",
+  "Rajkot",
+  "Kalyan-Dombivli",
+  "Vasai-Virar",
+  "Varanasi",
+  "Srinagar",
+  "Aurangabad",
+  "Dhanbad",
+  "Amritsar",
+  "Navi Mumbai",
+  "Ranchi",
+  "Howrah",
+  "Coimbatore",
+  "Jabalpur",
+  "Gwalior",
+  "Vijayawada",
+  "Jodhpur",
+  "Madurai",
+  "Raipur",
+  "Kota",
+  "Guwahati",
+  "Chandigarh",
+  "Solapur",
+  "Hubballi-Dharwad",
+  "Bareilly"
+];
 
 function App() {
   const [option, setOption] = useState("home");
@@ -95,12 +149,27 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
   const [city, setCity] = useState("");
+  const [stateName, setStateName] = useState("");
+  const [weather, setWeather] = useState(null);
   const [shortDesc, setShortDesc] = useState("");
   const [longDesc, setLongDesc] = useState("");
   const [name, setName] = useState("");
   const [timestamp, setTimestamp] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [showSug, setShowSug] = useState(false);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState("");
+  const hasWeatherKey = !!import.meta.env.VITE_WEATHERAPI_KEY;
+  const filteredCities = useMemo(() => {
+    const source = stateName && CITIES_BY_STATE[stateName] ? CITIES_BY_STATE[stateName] : getAllCities();
+    const words = city.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return source.slice(0, 10);
+    return source.filter((c) => {
+      const lc = c.toLowerCase();
+      return words.every((w) => lc.includes(w));
+    }).slice(0, 10);
+  }, [city, stateName]);
 
   useEffect(() => {
     if (open) {
@@ -126,6 +195,8 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
       setLat("");
       setLon("");
       setCity("");
+      setStateName("");
+      setWeather(null);
       setShortDesc("");
       setLongDesc("");
       setName("");
@@ -174,7 +245,7 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
         },
         () => {
           setError(
-            "Location permission denied. Please allow location or enter coordinates manually."
+            "Location permission denied. Please allow location access so we can detect GPS coordinates."
           );
         },
         { enableHighAccuracy: true, timeout: 10000 }
@@ -183,6 +254,60 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
       setError("Geolocation not supported by this browser.");
     }
   };
+
+  useEffect(() => {
+    // Fetch weather when valid city is selected
+    const cityNormalized = city.trim();
+    const list = stateName && CITIES_BY_STATE[stateName] ? CITIES_BY_STATE[stateName] : getAllCities();
+    const isValidCity = cityNormalized && list.some((c) => c.toLowerCase() === cityNormalized.toLowerCase());
+    if (!isValidCity) {
+      setWeather(null);
+      setWeatherLoading(false);
+      setWeatherError("");
+      return;
+    }
+    const key = import.meta.env.VITE_WEATHERAPI_KEY;
+    if (!key) {
+      setWeather(null);
+      setWeatherLoading(false);
+      setWeatherError("Weather API key is not configured.");
+      return;
+    }
+    const q = encodeURIComponent(cityNormalized);
+    setWeatherLoading(true);
+    setWeatherError("");
+    fetch(`https://api.weatherapi.com/v1/current.json?key=${key}&q=${q}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        if (!data || !data.current) {
+          setWeather(null);
+          setWeatherError("Weather not available.");
+          return;
+        }
+        setWeather({
+          temp_c: data.current.temp_c,
+          condition: data.current.condition?.text,
+          icon: data.current.condition?.icon,
+          humidity: data.current.humidity,
+          wind_kph: data.current.wind_kph,
+        });
+      })
+      .catch((e) => {
+        setWeather(null);
+        setWeatherError("Failed to fetch weather.");
+      })
+      .finally(() => setWeatherLoading(false));
+  }, [city, stateName]);
+
+  useEffect(() => {
+    // Hide suggestions once city exactly matches a list item
+    const list = stateName && CITIES_BY_STATE[stateName] ? CITIES_BY_STATE[stateName] : getAllCities();
+    const exact = city.trim() && list.some((c) => c.toLowerCase() === city.trim().toLowerCase());
+    if (exact) setShowSug(false);
+  }, [city, stateName]);
 
   const submitReport = async (e) => {
     e.preventDefault();
@@ -193,8 +318,14 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
       if (!file) {
         throw new Error("Please upload an image");
       }
-      if (!city.trim()) {
-        throw new Error("Please enter city");
+      const cityNormalized = city.trim();
+      if (!cityNormalized) {
+        throw new Error("Please select a city");
+      }
+      const list = stateName && CITIES_BY_STATE[stateName] ? CITIES_BY_STATE[stateName] : getAllCities();
+      const isValidCity = list.some((c) => c.toLowerCase() === cityNormalized.toLowerCase());
+      if (!isValidCity) {
+        throw new Error("Please select a valid city from the list");
       }
       if (!shortDesc.trim()) {
         throw new Error("Please enter a short description");
@@ -330,22 +461,77 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
           </div>
 
           
-          {/* City */}
-          <div>
-            <label style={{ fontWeight: 600 }}>{t("report_city", currentLang) || "City"}</label>
-            <select value={city} onChange={(e) => setCity(e.target.value)} style={inputStyle}>
-              <option value="" disabled>Select a city</option>
-              <option>Mumbai</option>
-              <option>Delhi</option>
-              <option>Bengaluru</option>
-              <option>Hyderabad</option>
-              <option>Ahmedabad</option>
-              <option>Chennai</option>
-              <option>Kolkata</option>
-              <option>Pune</option>
-              <option>Jaipur</option>
-              <option>Surat</option>
-            </select>
+          {/* State and City */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={{ fontWeight: 600 }}>State/UT</label>
+              <select
+                value={stateName}
+                onChange={(e) => {
+                  setStateName(e.target.value);
+                  setCity("");
+                }}
+                style={inputStyle}
+              >
+                <option value="">All (India)</option>
+                {Object.keys(CITIES_BY_STATE).sort().map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ position: "relative" }}>
+              <label style={{ fontWeight: 600 }}>{t("report_city", currentLang) || "City"}</label>
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => { setCity(e.target.value); setShowSug(true); }}
+                onFocus={() => setShowSug(true)}
+                onBlur={() => setTimeout(() => setShowSug(false), 150)}
+                placeholder="Start typing a city"
+                style={inputStyle}
+                autoComplete="off"
+              />
+              {showSug && city && filteredCities.length > 0 && (
+                <div style={suggestionsStyle}>
+                  {filteredCities.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { setCity(c); setShowSug(false); }}
+                      style={sugButtonStyle}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Weather Preview */}
+          <div style={weatherPanelStyle}>
+            {weatherLoading && (
+              <div style={{ color: "#333" }}>Loading weather…</div>
+            )}
+            {!weatherLoading && weatherError && (
+              <div style={{ color: "#b00020", fontWeight: 600 }}>{weatherError}</div>
+            )}
+            {!weatherLoading && !weatherError && !weather && (
+              <div style={{ color: "#333" }}>
+                {hasWeatherKey ? "Select a valid city to see current weather" : "Add VITE_WEATHERAPI_KEY in .env to show current weather"}
+              </div>
+            )}
+            {!weatherLoading && !weatherError && weather && (
+              <>
+                {weather.icon && <img src={weather.icon} alt="icon" />}
+                <div>
+                  <div style={{ fontWeight: 600 }}>{city}</div>
+                  <div style={{ color: "#333" }}>{weather.condition} • {weather.temp_c}°C • Humidity {weather.humidity}% • Wind {weather.wind_kph} km/h</div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Short description */}
@@ -444,4 +630,39 @@ const btnSecondary = {
   background: "#ffffff",
   color: "#1f2b50",
   cursor: "pointer",
+};
+
+const suggestionsStyle = {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  marginTop: 6,
+  background: "#ffffff",
+  border: "1px solid #dbe1f2",
+  borderRadius: 10,
+  boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+  maxHeight: 240,
+  overflowY: "auto",
+  zIndex: 10,
+};
+
+const sugButtonStyle = {
+  display: "block",
+  width: "100%",
+  textAlign: "left",
+  padding: "8px 12px",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  color: "#000000",
+};
+
+const weatherPanelStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  padding: "8px 12px",
+  border: "1px solid #e7eefb",
+  borderRadius: 10,
+  minHeight: 56,
 };
