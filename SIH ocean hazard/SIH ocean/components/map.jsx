@@ -1,9 +1,10 @@
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState, useContext, useMemo } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.heat";
 import { valueContext } from "../counter/counter";
 import { t } from "../src/utils/i18n";
+import IncidentForm from "./incident-form";
 
 const Map = () => {
   const { currentLang } = useContext(valueContext);
@@ -12,6 +13,110 @@ const Map = () => {
   const [showPoints, setShowPoints] = useState(true);
   const [showDbscan, setShowDbscan] = useState(true);
   const [showHotspots, setShowHotspots] = useState(true);
+  const [incidents, setIncidents] = useState([]);
+  const [selectedIncident, setSelectedIncident] = useState(null);
+  const [showIncidentPopup, setShowIncidentPopup] = useState(false);
+  const [showIncidentForm, setShowIncidentForm] = useState(false);
+
+  // Static incident data
+  const staticIncidents = useMemo(() => [
+    {
+      id: 1,
+      lat: 19.0760,
+      lng: 72.8777,
+      title: "Oil Spill Near Mumbai Port",
+      description: "Large oil spill detected near Mumbai port area. Environmental hazard affecting marine life. Immediate cleanup required.",
+      image: "https://images.unsplash.com/photo-1583212292454-1fe6229603b7?w=400&h=300&fit=crop",
+      reportedBy: "Marine Patrol Unit",
+      reportedDate: "2024-01-15T10:30:00Z",
+      verifiedBy: "Coast Guard",
+      verifiedDate: "2024-01-15T11:00:00Z",
+      isVerified: true,
+      severity: "high",
+      type: "oil_spill"
+    },
+    {
+      id: 2,
+      lat: 12.9716,
+      lng: 77.5946,
+      title: "Chemical Leak in Bangalore",
+      description: "Industrial chemical leak detected in water treatment facility. Potential contamination of local water sources.",
+      image: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=300&fit=crop",
+      reportedBy: "Environmental Agency",
+      reportedDate: "2024-01-14T14:20:00Z",
+      verifiedBy: "Hazard Response Team",
+      verifiedDate: "2024-01-14T15:00:00Z",
+      isVerified: true,
+      severity: "medium",
+      type: "chemical_leak"
+    },
+    {
+      id: 3,
+      lat: 28.6139,
+      lng: 77.2090,
+      title: "Water Contamination Alert",
+      description: "High levels of pollutants detected in Yamuna River. Public health advisory issued for affected areas.",
+      image: "https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=400&h=300&fit=crop",
+      reportedBy: "Water Quality Board",
+      reportedDate: "2024-01-13T09:15:00Z",
+      verifiedBy: "Health Department",
+      verifiedDate: "2024-01-13T10:30:00Z",
+      isVerified: true,
+      severity: "high",
+      type: "water_contamination"
+    },
+    {
+      id: 4,
+      lat: 13.0827,
+      lng: 80.2707,
+      title: "Air Quality Emergency",
+      description: "Severe air pollution levels detected in Chennai industrial zone. Visibility reduced to dangerous levels.",
+      image: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=300&fit=crop",
+      reportedBy: "Air Quality Monitoring",
+      reportedDate: "2024-01-12T16:45:00Z",
+      verifiedBy: "Environmental Protection Agency",
+      verifiedDate: "2024-01-12T17:30:00Z",
+      isVerified: true,
+      severity: "high",
+      type: "air_pollution"
+    },
+    {
+      id: 5,
+      lat: 22.5726,
+      lng: 88.3639,
+      title: "Industrial Waste Dumping",
+      description: "Illegal dumping of industrial waste detected in Kolkata port area. Environmental impact assessment required.",
+      image: "https://images.unsplash.com/photo-1583212292454-1fe6229603b7?w=400&h=300&fit=crop",
+      reportedBy: "Port Authority",
+      reportedDate: "2024-01-11T12:00:00Z",
+      verifiedBy: "Environmental Compliance",
+      verifiedDate: "2024-01-11T13:15:00Z",
+      isVerified: true,
+      severity: "medium",
+      type: "waste_dumping"
+    }
+  ], []);
+
+  // Initialize incidents with static data
+  useEffect(() => {
+    setIncidents(staticIncidents);
+  }, [staticIncidents]);
+
+  // Handle new incident submission
+  const handleNewIncident = (newIncident) => {
+    setIncidents(prev => [...prev, newIncident]);
+    // Refresh the map to show the new incident
+    if (map) {
+      // Remove existing incident markers
+      map.eachLayer(layer => {
+        if (layer instanceof L.LayerGroup && layer._leaflet_id) {
+          map.removeLayer(layer);
+        }
+      });
+      // Re-add all layers
+      // This will be handled by the useEffect when incidents state changes
+    }
+  };
 
   useEffect(() => {
     
@@ -60,26 +165,36 @@ const Map = () => {
     const max_count = Math.max(...hazardPoints.map((p) => p.report_count));
 
     
-    const pointsLayer = L.layerGroup();
-    hazardPoints.forEach((p) => {
-      const ratio = p.report_count / max_count;
-      const color =
-        ratio >= 0.75
-          ? "#d7191c" // red - severe
-          : ratio >= 0.5
-          ? "#fdae61" // orange - moderate
-          : ratio >= 0.25
-          ? "#ffff33" // yellow - low
-          : "#1a9641"; // green - very low
-
-      L.circleMarker([p.lat, p.lon], {
-        radius: 5,
+    const incidentsLayer = L.layerGroup();
+    incidents.forEach((incident) => {
+      const severityColors = {
+        high: "#d7191c",
+        medium: "#fdae61", 
+        low: "#1a9641"
+      };
+      const color = severityColors[incident.severity] || "#1a9641";
+      
+      L.circleMarker([incident.lat, incident.lng], { 
+        radius: 10, 
         color,
-        weight: 1,
-        fillOpacity: 0.85,
+        weight: 3, 
+        fillOpacity: 0.8 
       })
-        .bindPopup(`Intensity: ${p.report_count}`)
-        .addTo(pointsLayer);
+        .bindPopup(`
+          <div style="min-width: 200px;">
+            <h6 style="margin: 0 0 8px 0; color: ${color};">${incident.title}</h6>
+            <p style="margin: 0 0 8px 0; font-size: 12px;">${incident.description.substring(0, 100)}...</p>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #666;">
+              <span>${incident.isVerified ? '✅ Verified' : '⏳ Pending'}</span>
+              <span>${new Date(incident.reportedDate).toLocaleDateString()}</span>
+            </div>
+          </div>
+        `)
+        .on('click', () => {
+          setSelectedIncident(incident);
+          setShowIncidentPopup(true);
+        })
+        .addTo(incidentsLayer);
     });
 
     
@@ -203,7 +318,7 @@ const Map = () => {
       heatLayer.addTo(leafletMap);
     }
     if (showPoints) {
-      pointsLayer.addTo(leafletMap);
+      incidentsLayer.addTo(leafletMap);
     }
     if (showDbscan) {
       dbscanLayer.addTo(leafletMap);
@@ -245,7 +360,7 @@ const Map = () => {
       window.removeEventListener('mapSearch', handleMapSearch);
       window.removeEventListener('mapFocusIncident', handleFocusIncident);
     };
-  }, [showHeat, showPoints, showDbscan, showHotspots]);
+  }, [showHeat, showPoints, showDbscan, showHotspots, incidents]);
 
 
   return (
@@ -257,7 +372,7 @@ const Map = () => {
         style={{
           position: "absolute",
           top: "20px",
-          right: "20px",
+          left: "20px",
           zIndex: 1000,
         }}
       >
@@ -286,27 +401,27 @@ const Map = () => {
           </li>
           <li>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
-              <input type="checkbox" checked={showPoints} onChange={(e) => setShowPoints(e.target.checked)} />
-              <span>Hazard Points</span>
-            </label>
+          <input type="checkbox" checked={showPoints} onChange={(e) => setShowPoints(e.target.checked)} />
+              <span>Incident Reports</span>
+        </label>
           </li>
           <li>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
-              <input type="checkbox" checked={showHeat} onChange={(e) => setShowHeat(e.target.checked)} />
+          <input type="checkbox" checked={showHeat} onChange={(e) => setShowHeat(e.target.checked)} />
               <span>Heatmap</span>
-            </label>
+        </label>
           </li>
           <li>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
-              <input type="checkbox" checked={showDbscan} onChange={(e) => setShowDbscan(e.target.checked)} />
+          <input type="checkbox" checked={showDbscan} onChange={(e) => setShowDbscan(e.target.checked)} />
               <span>Cluster Areas (DBSCAN)</span>
-            </label>
+        </label>
           </li>
           <li>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
-              <input type="checkbox" checked={showHotspots} onChange={(e) => setShowHotspots(e.target.checked)} />
+          <input type="checkbox" checked={showHotspots} onChange={(e) => setShowHotspots(e.target.checked)} />
               <span>Hotspots (15km radius)</span>
-            </label>
+        </label>
           </li>
         </ul>
       </div>
@@ -323,7 +438,164 @@ const Map = () => {
           left: 0,
           zIndex: 0,
         }}
-      ></div>
+      >      </div>
+
+      {/* Incident Details Popup Modal */}
+      {showIncidentPopup && selectedIncident && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10000,
+            padding: "20px",
+          }}
+          onClick={() => setShowIncidentPopup(false)}
+        >
+          <div
+            style={{
+              backgroundColor: "white",
+              borderRadius: "12px",
+              maxWidth: "600px",
+              width: "100%",
+              maxHeight: "90vh",
+              overflow: "auto",
+              position: "relative",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setShowIncidentPopup(false)}
+              style={{
+                position: "absolute",
+                top: "15px",
+                right: "15px",
+                background: "none",
+                border: "none",
+                fontSize: "24px",
+                cursor: "pointer",
+                color: "#666",
+                zIndex: 1,
+              }}
+            >
+              ×
+            </button>
+
+            {/* Incident Image */}
+            {selectedIncident.image && (
+              <img
+                src={selectedIncident.image}
+                alt={selectedIncident.title}
+                style={{
+                  width: "100%",
+                  height: "250px",
+                  objectFit: "cover",
+                  borderTopLeftRadius: "12px",
+                  borderTopRightRadius: "12px",
+                }}
+              />
+            )}
+
+            <div style={{ padding: "24px" }}>
+              {/* Title and Severity */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+                <h3 style={{ margin: 0, color: "#333", fontSize: "20px", lineHeight: "1.3" }}>
+                  {selectedIncident.title}
+                </h3>
+                <span
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "20px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    textTransform: "uppercase",
+                    backgroundColor: selectedIncident.severity === "high" ? "#fee" : selectedIncident.severity === "medium" ? "#fff3cd" : "#d4edda",
+                    color: selectedIncident.severity === "high" ? "#721c24" : selectedIncident.severity === "medium" ? "#856404" : "#155724",
+                  }}
+                >
+                  {selectedIncident.severity}
+                </span>
+              </div>
+
+              {/* Description */}
+              <p style={{ margin: "0 0 20px 0", color: "#666", lineHeight: "1.6" }}>
+                {selectedIncident.description}
+              </p>
+
+              {/* Status Boxes */}
+              <div style={{ display: "flex", gap: "16px", marginBottom: "20px" }}>
+                {/* Reported Box */}
+                <div style={{ flex: 1, padding: "16px", backgroundColor: "#f8f9fa", borderRadius: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "16px" }}>📝</span>
+                    <span style={{ fontWeight: "600", color: "#333" }}>Reported</span>
+                  </div>
+                  <div style={{ fontSize: "14px", color: "#666" }}>
+                    <div><strong>By:</strong> {selectedIncident.reportedBy}</div>
+                    <div><strong>Date:</strong> {new Date(selectedIncident.reportedDate).toLocaleString()}</div>
+                  </div>
+                </div>
+
+                {/* Verified Box */}
+                <div style={{ flex: 1, padding: "16px", backgroundColor: selectedIncident.isVerified ? "#d4edda" : "#fff3cd", borderRadius: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "16px" }}>{selectedIncident.isVerified ? "✅" : "⏳"}</span>
+                    <span style={{ fontWeight: "600", color: "#333" }}>Verified</span>
+                  </div>
+                  <div style={{ fontSize: "14px", color: "#666" }}>
+                    {selectedIncident.isVerified ? (
+                      <>
+                        <div><strong>By:</strong> {selectedIncident.verifiedBy}</div>
+                        <div><strong>Date:</strong> {new Date(selectedIncident.verifiedDate).toLocaleString()}</div>
+                      </>
+                    ) : (
+                      <div>Pending verification</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Verification Toggle */}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px", backgroundColor: "#f8f9fa", borderRadius: "8px" }}>
+                <input
+                  type="checkbox"
+                  id="verified-toggle"
+                  checked={selectedIncident.isVerified}
+                  onChange={(e) => {
+                    const updatedIncident = {
+                      ...selectedIncident,
+                      isVerified: e.target.checked,
+                      verifiedBy: e.target.checked ? "System Admin" : null,
+                      verifiedDate: e.target.checked ? new Date().toISOString() : null
+                    };
+                    setSelectedIncident(updatedIncident);
+                    setIncidents(prev => prev.map(inc => inc.id === selectedIncident.id ? updatedIncident : inc));
+                  }}
+                  style={{ transform: "scale(1.2)" }}
+                />
+                <label htmlFor="verified-toggle" style={{ fontWeight: "600", color: "#333", cursor: "pointer" }}>
+                  Mark as Verified
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Incident Form Modal */}
+      {showIncidentForm && (
+        <IncidentForm
+          onSubmit={handleNewIncident}
+          onClose={() => setShowIncidentForm(false)}
+        />
+      )}
     </div>
   );
 };
