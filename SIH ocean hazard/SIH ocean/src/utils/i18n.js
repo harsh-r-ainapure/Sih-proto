@@ -18,6 +18,8 @@ const UI_STRINGS = {
     nav_instagram: "Instagram",
     nav_x: "X",
     nav_reddit: "Reddit",
+    
+    latest_incidents: "LATEST OCEAN HAZARD INCIDENTS",
 
     search_placeholder: "Search for a place",
     search_button: "Search",
@@ -57,14 +59,16 @@ const UI_STRINGS = {
     report_submit: "Submit",
   },
   hi: {
-    app_title: "महासागर खतरा",
+    app_title: "समुद्र खतरा",
     nav_home: "होम",
-    nav_inform: "सूचित करें",
+    nav_inform: "घटना रिपोर्ट करें",
     nav_latest: "नवीनतम",
     nav_social_media: "सोशल मीडिया",
     nav_instagram: "इंस्टाग्राम",
     nav_x: "एक्स",
     nav_reddit: "रेडिट",
+    
+    latest_incidents: "नवीनतम समुद्री खतरे की घटनाएँ",
 
     search_placeholder: "स्थान खोजें",
     search_button: "खोजें",
@@ -108,10 +112,12 @@ const UI_STRINGS = {
     nav_home: "मुखपृष्ठ",
     nav_inform: "माहिती द्या",
     nav_latest: "नवीन",
-    nav_social_media: "सोशल मीडि���ा",
+    nav_social_media: "सोशल मीडिया",
     nav_instagram: "इंस्टाग्राम",
     nav_x: "एक्स",
     nav_reddit: "रेडिट",
+    
+    latest_incidents: "नवीनतम समुद्री धोका घटना",
 
     search_placeholder: "ठिकाण शोधा",
     search_button: "शोधा",

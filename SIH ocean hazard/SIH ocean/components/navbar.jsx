@@ -2,7 +2,7 @@ import { useContext, useState } from "react";
 import { valueContext } from "../counter/counter";
 import { t } from "../src/utils/i18n";
 
-const Navbar = ({ onclickhome,  onclickform, onclickinsta, onclickreddit }) => {
+const Navbar = ({ onclickhome, onclickform, onclickinsta, onclickreddit, onclicklatest }) => {
   const { currentLang } = useContext(valueContext);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -131,6 +131,7 @@ const Navbar = ({ onclickhome,  onclickform, onclickinsta, onclickreddit }) => {
                   marginRight: "10px",
                   textDecoration: "none",
                 }}
+                onClick={onclicklatest}
                 onMouseOver={(e) => (e.target.style.color = "#FFD700")}
                 onMouseOut={(e) => (e.target.style.color = "white")}
               >

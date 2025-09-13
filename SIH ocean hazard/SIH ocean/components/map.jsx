@@ -16,6 +16,14 @@ const Map = () => {
   useEffect(() => {
     
     const leafletMap = L.map("map").setView([15, 78], 5);
+    
+    // Event listener for focusing on incidents from Latest component
+    const handleFocusIncident = (event) => {
+      const { lat, lon } = event.detail;
+      leafletMap.setView([lat, lon], 10);
+    };
+    
+    window.addEventListener('mapFocusIncident', handleFocusIncident);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(leafletMap);
@@ -235,6 +243,7 @@ const Map = () => {
     return () => {
       leafletMap.remove();
       window.removeEventListener('mapSearch', handleMapSearch);
+      window.removeEventListener('mapFocusIncident', handleFocusIncident);
     };
   }, [showHeat, showPoints, showDbscan, showHotspots]);
 

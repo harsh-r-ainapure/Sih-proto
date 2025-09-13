@@ -5,6 +5,7 @@ import Home from "../components/home";
 import Instagram from "../components/instagram";
 import MyPosts from "../components/myposts";
 import Reddit from "../components/reddit";
+import Latest from "../components/latest";
 import { valueContext } from "../counter/counter";
 import { t } from "./utils/i18n";
 import exifr from "exifr";
@@ -68,6 +69,7 @@ function App() {
   const [ogList, setOgList] = useState([]); // ✅ global list state
   const [currentLang, setCurrentLang] = useState("en"); // en | hi | mr
   const [reportOpen, setReportOpen] = useState(false);
+  const [latestIncidents, setLatestIncidents] = useState([]);
 
   // load persisted language on mount
   useEffect(() => {
@@ -92,12 +94,14 @@ function App() {
   const onclickinsta = () => setOption("instagram");
   const onclickmypost = () => setOption("myPost");
   const onclickreddit = () => setOption("reddit");
+  const onclicklatest = () => setOption("latest");
 
   const MyComponent = () => {
     if (option === "home") return <Home />;
     if (option === "instagram") return <Instagram />;
     if (option === "myPost") return <MyPosts />;
     if (option === "reddit") return <Reddit />;
+    if (option === "latest") return <Latest />;
     return null;
   };
 
@@ -122,6 +126,7 @@ function App() {
         onclickhome={onclickhome}
         onclickinsta={onclickinsta}
         onclickreddit={onclickreddit}
+        onclicklatest={onclicklatest}
       />
       <div style={{ padding: "20px", marginTop: 64, minHeight: "calc(100vh - 200px)" }}>
         <MyComponent />
@@ -152,6 +157,7 @@ export default App;
 function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
   const [file, setFile] = useState(null);
   const [previewURL, setPreviewURL] = useState("");
+  const [objectURL, setObjectURL] = useState("");
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
   const [city, setCity] = useState("");
@@ -196,8 +202,10 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
       }
     } else {
       // Reset on close
+      if (objectURL) { try { URL.revokeObjectURL(objectURL); } catch (_) {} }
       setFile(null);
       setPreviewURL("");
+      setObjectURL("");
       setLat("");
       setLon("");
       setCity("");
@@ -225,21 +233,40 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
     setFile(f);
     setError("");
 
+    // Cleanup previous object URL if any
+    if (objectURL) {
+      try { URL.revokeObjectURL(objectURL); } catch (_) {}
+      setObjectURL("");
+    }
+
+    const isImage = f.type.startsWith("image/");
+    const isVideo = f.type.startsWith("video/");
+
     try {
-      const dataUrl = await readAsDataURL(f);
-      setPreviewURL(dataUrl);
+      if (isImage) {
+        const dataUrl = await readAsDataURL(f);
+        setPreviewURL(dataUrl);
+      } else if (isVideo) {
+        const url = URL.createObjectURL(f);
+        setPreviewURL(url);
+        setObjectURL(url);
+      } else {
+        setPreviewURL("");
+      }
     } catch (_) {}
 
-    // Try EXIF GPS first
-    try {
-      const gps = await exifr.gps(f);
-      if (gps && typeof gps.latitude === "number" && typeof gps.longitude === "number") {
-        setLat(gps.latitude.toFixed(6));
-        setLon(gps.longitude.toFixed(6));
-        return; // We got coordinates from EXIF
+    // Try EXIF GPS only for images
+    if (isImage) {
+      try {
+        const gps = await exifr.gps(f);
+        if (gps && typeof gps.latitude === "number" && typeof gps.longitude === "number") {
+          setLat(gps.latitude.toFixed(6));
+          setLon(gps.longitude.toFixed(6));
+          return; // We got coordinates from EXIF
+        }
+      } catch (_) {
+        // ignore and fallback to geolocation
       }
-    } catch (_) {
-      // ignore and fallback to geolocation
     }
 
     // Fallback to browser geolocation
@@ -322,7 +349,7 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
 
     try {
       if (!file) {
-        throw new Error("Please upload an image");
+        throw new Error("Please upload an image or video");
       }
       const cityNormalized = city.trim();
       if (!cityNormalized) {
@@ -340,25 +367,32 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
         throw new Error("Please enter your name");
       }
 
-      const payload = {
-        city: city.trim(),
-        shortDesc: shortDesc.trim(),
-        longDesc: longDesc.trim(),
-        name: name.trim(),
-        lat: lat ? Number(lat) : null,
-        lon: lon ? Number(lon) : null,
-        timestamp,
-        // For demonstration purposes only; a real app would upload to storage and send a URL
-        image: previewURL,
-      };
+      const mediaType = file?.type?.startsWith("video/") ? "video" : (file?.type?.startsWith("image/") ? "image" : "unknown");
+
+      const form = new FormData();
+      form.append("city", city.trim());
+      form.append("shortDesc", shortDesc.trim());
+      form.append("longDesc", longDesc.trim());
+      form.append("name", name.trim());
+      if (lat) form.append("lat", String(Number(lat)));
+      if (lon) form.append("lon", String(Number(lon)));
+      form.append("timestamp", timestamp);
+      form.append("mediaType", mediaType);
+      if (file) form.append("media", file, file.name);
 
       await fetch("http://localhost:5000/inform", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: form,
       });
 
-      onSubmitted?.(payload);
+      onSubmitted?.({
+        city: city.trim(),
+        shortDesc: shortDesc.trim(),
+        lat: lat ? Number(lat) : null,
+        lon: lon ? Number(lon) : null,
+        timestamp,
+        image: previewURL,
+      });
       onClose();
     } catch (err) {
       setError(err?.message || "Failed to submit report");
@@ -434,7 +468,7 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
             }}
           >
             <label style={{ fontWeight: 600 }}>
-              {t("report_upload_image", currentLang) || "Upload image"}
+              {t("report_upload_image", currentLang) || "Upload image or video"}
             </label>
             <div
               style={{
@@ -449,20 +483,28 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
             >
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 onChange={handleFileChange}
                 style={{ flex: 1 }}
               />
               {previewURL ? (
-                <img
-                  src={previewURL}
-                  alt="preview"
-                  style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid #eee" }}
-                />
+                file && file.type.startsWith("video/") ? (
+                  <video
+                    src={previewURL}
+                    style={{ width: 120, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid #eee" }}
+                    controls
+                  />
+                ) : (
+                  <img
+                    src={previewURL}
+                    alt="preview"
+                    style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid #eee" }}
+                  />
+                )
               ) : null}
             </div>
             <small style={{ color: "#555" }}>
-              We will try to extract GPS from the image. If not present, we'll use your current location.
+              We will try to extract GPS from the media. If not present, we'll use your current location.
             </small>
           </div>
 

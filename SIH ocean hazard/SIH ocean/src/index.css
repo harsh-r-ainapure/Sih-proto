@@ -26,48 +26,6 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-html {
-  overflow-x: hidden;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-/* Mobile responsive styles */
-@media (max-width: 768px) {
-  .navbar-brand {
-    font-size: 1.1rem !important;
-  }
-  
-  .navbar-nav .nav-link {
-    font-size: 0.9rem !important;
-    padding: 0.5rem 0.3rem !important;
-  }
-  
-  .dropdown-menu {
-    font-size: 0.9rem;
-  }
-  
-  /* Map controls mobile adjustments */
-  .map-controls {
-    max-width: calc(100vw - 20px) !important;
-    flex-wrap: wrap !important;
-  }
-  
-  /* Footer mobile adjustments */
-  footer ul {
-    flex-direction: column !important;
-    gap: 5px !important;
-  }
-  
-  footer li {
-    margin: 2px 0 !important;
-  }
 }
 
 h1 {
