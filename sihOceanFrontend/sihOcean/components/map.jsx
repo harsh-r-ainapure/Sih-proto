@@ -16,6 +16,33 @@ const Map = () => {
   useEffect(() => {
     
     const leafletMap = L.map("map").setView([15, 78], 5);
+
+    // Manage light/dark tile layers
+    const lightTiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+    });
+    const darkTiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: "&copy; OpenStreetMap contributors & CARTO",
+      subdomains: 'abcd'
+    });
+
+    function currentTheme(){
+      return document.documentElement.getAttribute('data-theme') || 'light';
+    }
+    function applyTiles(){
+      const th = currentTheme();
+      if (th === 'dark') {
+        if (leafletMap.hasLayer(lightTiles)) leafletMap.removeLayer(lightTiles);
+        if (!leafletMap.hasLayer(darkTiles)) darkTiles.addTo(leafletMap);
+      } else {
+        if (leafletMap.hasLayer(darkTiles)) leafletMap.removeLayer(darkTiles);
+        if (!leafletMap.hasLayer(lightTiles)) lightTiles.addTo(leafletMap);
+      }
+    }
+    applyTiles();
+
+    const handleThemeChange = () => applyTiles();
+    window.addEventListener('themechange', handleThemeChange);
     
     // Event listener for focusing on incidents from Latest component
     const handleFocusIncident = (event) => {
@@ -24,9 +51,6 @@ const Map = () => {
     };
     
     window.addEventListener('mapFocusIncident', handleFocusIncident);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(leafletMap);
 
     const USE_GEOJSON = true;
     if (USE_GEOJSON) {
@@ -333,12 +357,13 @@ const Map = () => {
       leafletMap.remove();
       window.removeEventListener('mapSearch', handleMapSearch);
       window.removeEventListener('mapFocusIncident', handleFocusIncident);
+      window.removeEventListener('themechange', handleThemeChange);
     };
   }, [showHeat, showPoints, showDbscan, showHotspots]);
 
 
   return (
-    <div style={{ position: "relative", height: "calc(100vh - 200px)", width: "100%" }}>
+    <div style={{ position: "relative", height: "100%", width: "100%" }}>
 
       {/* Layer controls - Mobile responsive dropdown */}
       <div
@@ -351,13 +376,14 @@ const Map = () => {
         }}
       >
         <button
-          className="btn btn-light dropdown-toggle"
+          className="btn dropdown-toggle"
           type="button"
           data-bs-toggle="dropdown"
           aria-expanded="false"
           style={{
-            background: "rgba(255,255,255,0.9)",
-            border: "1px solid #ddd",
+            background: "var(--panel-bg, rgba(255,255,255,0.92))",
+            color: "var(--panel-fg, #111)",
+            border: "1px solid var(--panel-bd, #ddd)",
             borderRadius: "8px",
             padding: "8px 12px",
             boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
@@ -367,32 +393,32 @@ const Map = () => {
         >
           Map Layers
         </button>
-        <ul className="dropdown-menu dropdown-menu-end" style={{ minWidth: "250px" }}>
-          <li style={{ padding: "8px 16px", borderBottom: "1px solid #eee" }}>
-            <div style={{ fontWeight: "600", color: "#333", fontSize: "12px", textTransform: "uppercase" }}>
-              OpenStreetMap Layers
+        <ul className="dropdown-menu dropdown-menu-end" style={{ minWidth: "250px", background: "var(--panel-bg, #fff)", color: "var(--panel-fg, #111)" }}>
+          <li style={{ padding: "8px 16px", borderBottom: "1px solid var(--panel-bd, #eee)" }}>
+            <div style={{ fontWeight: "600", color: "var(--panel-fg, #333)", fontSize: "12px", textTransform: "uppercase" }}>
+              Map Layers
             </div>
           </li>
           <li>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer", color: "var(--panel-fg, #111)" }}>
               <input type="checkbox" checked={showPoints} onChange={(e) => setShowPoints(e.target.checked)} />
               <span>Hazard Points</span>
             </label>
           </li>
           <li>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer", color: "var(--panel-fg, #111)" }}>
               <input type="checkbox" checked={showHeat} onChange={(e) => setShowHeat(e.target.checked)} />
               <span>Heatmap</span>
             </label>
           </li>
           <li>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer", color: "var(--panel-fg, #111)" }}>
               <input type="checkbox" checked={showDbscan} onChange={(e) => setShowDbscan(e.target.checked)} />
               <span>Cluster Areas (DBSCAN)</span>
             </label>
           </li>
           <li>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer", color: "var(--panel-fg, #111)" }}>
               <input type="checkbox" checked={showHotspots} onChange={(e) => setShowHotspots(e.target.checked)} />
               <span>Hotspots (15km radius)</span>
             </label>
@@ -405,11 +431,13 @@ const Map = () => {
       <div
         id="map"
         style={{
-          height: "calc(100vh - 200px)",
+          height: "100%",
           width: "100%",
           position: "absolute",
           top: 0,
           left: 0,
+          right: 0,
+          bottom: 0,
           zIndex: 0,
         }}
       ></div>

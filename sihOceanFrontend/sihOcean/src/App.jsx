@@ -70,6 +70,9 @@ function App() {
   const [currentLang, setCurrentLang] = useState("en"); // en | hi | mr
   const [reportOpen, setReportOpen] = useState(false);
   const [latestIncidents, setLatestIncidents] = useState([]);
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem("app.theme") || "light"; } catch { return "light"; }
+  });
 
   // load persisted language on mount
   useEffect(() => {
@@ -80,6 +83,13 @@ function App() {
       // ignore
     }
   }, []);
+
+  // persist theme and update document attribute for CSS hooks
+  useEffect(() => {
+    try { localStorage.setItem("app.theme", theme); } catch {}
+    try { document.documentElement.setAttribute("data-theme", theme); } catch {}
+    try { window.dispatchEvent(new CustomEvent('themechange', { detail: { theme } })); } catch {}
+  }, [theme]);
 
   // Shared refs (kept for compatibility but not used by the old Inform page anymore)
   const locationRef = useRef();
@@ -127,8 +137,10 @@ function App() {
         onclickinsta={onclickinsta}
         onclickreddit={onclickreddit}
         onclicklatest={onclicklatest}
+        theme={theme}
+        onToggleTheme={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
       />
-      <div style={{ padding: "20px", marginTop: 64, minHeight: "calc(100vh - 200px)" }}>
+      <div style={{ position: "fixed", top: 64, left: 0, right: 0, bottom: 0 }}>
         <MyComponent />
       </div>
 
@@ -446,10 +458,11 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
           width: "min(720px, 96vw)",
           maxHeight: "90vh",
           overflow: "auto",
-          background: "#ffffff",
+          background: "var(--panel-bg, #ffffff)",
+          color: "var(--panel-fg, #111)",
           borderRadius: 16,
           boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
-          border: "1px solid rgba(0,0,0,0.08)",
+          border: "1px solid var(--panel-bd, rgba(0,0,0,0.08))",
         }}
       >
         <div
@@ -458,8 +471,8 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
             alignItems: "center",
             justifyContent: "space-between",
             padding: "16px 20px",
-            borderBottom: "1px solid #eee",
-            background: "linear-gradient(180deg, #007BFF 0%, #0063cc 100%)",
+            borderBottom: "1px solid var(--panel-bd, #eee)",
+            background: "var(--header-grad, linear-gradient(180deg, #007BFF 0%, #0063cc 100%))",
             color: "#fff",
             borderTopLeftRadius: 16,
             borderTopRightRadius: 16,
@@ -494,10 +507,10 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
             </label>
             <div
               style={{
-                border: "2px dashed #c8d7ff",
+                border: "2px dashed var(--panel-bd, #c8d7ff)",
                 borderRadius: 12,
                 padding: 16,
-                background: "#f6f9ff",
+                background: "var(--panel-bg, #f6f9ff)",
                 display: "flex",
                 alignItems: "center",
                 gap: 16,
@@ -559,7 +572,7 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
                 onFocus={() => setShowSug(true)}
                 onBlur={() => setTimeout(() => setShowSug(false), 150)}
                 placeholder="Start typing a city"
-                style={inputStyle}
+                style={{ ...inputStyle, color: "var(--panel-fg, #111)", background: "var(--panel-bg, #fff)", borderColor: "var(--panel-bd, #dbe1f2)" }}
                 autoComplete="off"
               />
               {showSug && city && filteredCities.length > 0 && (

@@ -24,7 +24,7 @@ const Footer = ({ onclickmypost }) => {
         width: "100%",
         backgroundColor: "#007BFF",
         color: "white",
-        padding: "15px 0",
+        padding: "10px 0",
         borderTop: "2px solid #0056b3",
         boxShadow: "0 -2px 8px rgba(0, 0, 0, 0.1)",
         textAlign: "center",

@@ -2,7 +2,7 @@ import { useContext, useState } from "react";
 import { valueContext } from "../counter/counter";
 import { t } from "../src/utils/i18n";
 
-const Navbar = ({ onclickhome, onclickform, onclickinsta, onclickreddit, onclicklatest }) => {
+const Navbar = ({ onclickhome, onclickform, onclickinsta, onclickreddit, onclicklatest, theme = "light", onToggleTheme }) => {
   const { currentLang } = useContext(valueContext);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -83,6 +83,17 @@ const Navbar = ({ onclickhome, onclickform, onclickinsta, onclickreddit, onclick
 
         <div className="collapse navbar-collapse" id="navbarSupportedContent">
           <ul className="navbar-nav me-auto mb-2 mb-lg-0">
+            {/* Theme toggle */}
+            <li className="nav-item">
+              <button
+                className="nav-link btn btn-link"
+                style={{ color: "white", fontWeight: 500, marginRight: 10, textDecoration: "none" }}
+                onClick={onToggleTheme}
+                title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+              >
+                {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+              </button>
+            </li>
             {/* Home */}
             <li className="nav-item">
               <button

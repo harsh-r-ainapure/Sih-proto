@@ -1,11 +1,8 @@
+/***** Base *****/
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -13,26 +10,36 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Light theme (default) */
+:root[data-theme="light"] {
+  color-scheme: light;
+  color: #213547;
+  background-color: #ffffff;
+}
+
+/* Dark theme */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #121212;
+}
+
+/* Remove page scrollbars; main content is fixed */
+html, body, #root {
+  height: 100%;
+  overflow: hidden; /* prevent page scroll */
+}
+
+/* Links */
 a {
   font-weight: 500;
   color: #646cff;
   text-decoration: inherit;
 }
-a:hover {
-  color: #535bf2;
-}
+:root[data-theme="dark"] a { color: #8aa0ff; }
+a:hover { color: #535bf2; }
 
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
+/* Buttons */
 button {
   border-radius: 8px;
   border: 1px solid transparent;
@@ -40,27 +47,44 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: #f3f3f3;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: border-color 0.25s, background-color .2s, color .2s;
 }
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+:root[data-theme="dark"] button { background-color: #1f1f1f; color: #fff; }
+button:hover { border-color: #646cff; }
+button:focus, button:focus-visible { outline: 4px auto -webkit-focus-ring-color; }
+
+/* Navbar/Footer theme colors via attribute selectors */
+:root[data-theme="dark"] .navbar { background-color: #0f172a !important; border-bottom-color: #0b1222 !important; }
+:root[data-theme="dark"] footer { background-color: #0f172a !important; border-top-color: #0b1222 !important; color: #e5e7eb !important; }
+
+/* Modal header gradient tweak for dark */
+:root[data-theme="dark"] {
+  --header-grad: linear-gradient(180deg, #0b5ed7 0%, #0949a8 100%);
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+/* Leaflet fixes for dark theme (tile attribution, controls) */
+:root[data-theme="dark"] .leaflet-control-attribution,
+:root[data-theme="dark"] .leaflet-control-layers {
+  background: rgba(30,30,30,0.8);
+  color: #ddd;
+}
+:root[data-theme="dark"] .leaflet-container .leaflet-bar a,
+:root[data-theme="dark"] .leaflet-container .leaflet-bar a:hover {
+  background-color: #1f1f1f;
+  color: #ddd;
+  border-color: #333;
+}
+
+/* Themed panel variables for map layer dropdown */
+:root[data-theme="light"] {
+  --panel-bg: rgba(255,255,255,0.95);
+  --panel-fg: #111;
+  --panel-bd: #ddd;
+}
+:root[data-theme="dark"] {
+  --panel-bg: rgba(25,25,25,0.95);
+  --panel-fg: #e5e7eb;
+  --panel-bd: #333;
 }
