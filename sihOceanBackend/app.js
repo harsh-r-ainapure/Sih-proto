@@ -3,6 +3,8 @@ import cors from "cors";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { createClient } from "@supabase/supabase-js";
+import "dotenv/config";
 
 const app = express();
 const PORT = 5000;
@@ -10,11 +12,16 @@ const PORT = 5000;
 app.use(cors());
 app.use(express.json());
 
-// Ensure uploads directory exists
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+// Your existing multer and express code follows...
 const uploadDir = path.resolve("uploads");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-// Configure multer for handling image/video uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
@@ -31,7 +38,6 @@ const upload = multer({
   },
 });
 
-// Accept multipart form-data with optional media file
 app.post("/inform", (req, res, next) => {
   const contentType = req.headers["content-type"] || "";
   if (contentType.includes("multipart/form-data")) {
@@ -40,35 +46,46 @@ app.post("/inform", (req, res, next) => {
       next();
     });
   }
-  // For legacy JSON
   return next();
-}, (req, res) => {
-  // If using multipart, fields are in req.body (strings) and file in req.file
-  if (req.file || (req.headers["content-type"] || "").includes("multipart/form-data")) {
-    const { city, shortDesc, longDesc, name, lat, lon, timestamp, mediaType } = req.body || {};
-    console.log("Received multipart report:");
-    console.log({ city, shortDesc, longDesc, name, lat, lon, timestamp, mediaType });
-    if (req.file) {
-      console.log("Saved media:", {
-        fieldname: req.file.fieldname,
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-        path: req.file.path,
-      });
+}, async (req, res) => {
+  const { city, shortDesc, longDesc, name, lat, lon, mediaType } = req.body || {};
+  const mediaPath = req.file ? `/uploads/${req.file.filename}` : null;
+  const description = `${shortDesc} - ${longDesc}`;
+  
+  try {
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .upsert({ email: `${name}@example.com` })
+      .select('id')
+      .single();
+
+    if (userError) {
+      console.error("Error creating user:", userError);
+      return res.status(500).json({ message: "Error saving report" });
     }
-    return res.status(200).json({ message: "Report received", mediaSaved: !!req.file });
+
+    const { data: reportData, error: reportError } = await supabase
+      .from("reports")
+      .insert({
+        user_id: userData.id,
+        hazard_type: mediaType,
+        severity: 3,
+        description,
+        location: `POINT(${lon} ${lat})`, // Supabase will convert this
+        media_urls: mediaPath ? [mediaPath] : [],
+        verification_status: "pending",
+      });
+
+    if (reportError) {
+      console.error("Error saving report:", reportError);
+      return res.status(500).json({ message: "Error saving report" });
+    }
+
+    res.status(200).json({ message: "Report received and saved to database" });
+  } catch (err) {
+    console.error("Error saving report to database:", err);
+    res.status(500).json({ message: "Error saving report" });
   }
-
-  // Legacy JSON payload support
-  const { location, disaster, severe, photo } = req.body || {};
-  console.log("Received legacy JSON data:");
-  console.log("Location:", location);
-  console.log("Disaster:", disaster);
-  console.log("Severity:", severe);
-  console.log("Photo:", photo);
-
-  res.status(200).json({ message: "Legacy form data received successfully" });
 });
 
 app.listen(PORT, () => {
