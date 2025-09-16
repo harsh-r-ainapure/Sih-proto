@@ -48,43 +48,45 @@ app.post("/inform", (req, res, next) => {
   }
   return next();
 }, async (req, res) => {
-  const { city, shortDesc, longDesc, name, lat, lon, mediaType } = req.body || {};
+  const { city, shortDesc, longDesc, name, lat, lon, hazardType, severity } = req.body || {};
   const mediaPath = req.file ? `/uploads/${req.file.filename}` : null;
-  const description = `${shortDesc} - ${longDesc}`;
-  
+  const description = `${shortDesc || ""}${longDesc ? ` - ${longDesc}` : ""}`.trim();
+
+  // normalize severity 1..5
+  let sev = parseInt(severity, 10);
+  if (Number.isNaN(sev) || sev < 1 || sev > 5) sev = 3;
+
   try {
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .upsert({ email: `${name}@example.com` })
-      .select('id')
-      .single();
-
-    if (userError) {
-      console.error("Error creating user:", userError);
-      return res.status(500).json({ message: "Error saving report" });
-    }
-
-    const { data: reportData, error: reportError } = await supabase
+    // Prototype mode: skip user creation; store without user_id
+    const { data: reportRow, error: reportError } = await supabase
       .from("reports")
       .insert({
-        user_id: userData.id,
-        hazard_type: mediaType,
-        severity: 3,
+        user_id: null,
+        hazard_type: hazardType || null,
+        severity: sev,
         description,
-        location: `POINT(${lon} ${lat})`, // Supabase will convert this
+        location: (lon && lat) ? `POINT(${lon} ${lat})` : null,
         media_urls: mediaPath ? [mediaPath] : [],
         verification_status: "pending",
-      });
+        created_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
 
     if (reportError) {
-      console.error("Error saving report:", reportError);
-      return res.status(500).json({ message: "Error saving report" });
+      console.error("Supabase reports.insert error:", reportError);
+      return res.status(500).json({
+        message: "Failed to save report",
+        code: reportError.code,
+        details: reportError.details || reportError.message,
+        context: "reports.insert",
+      });
     }
 
-    res.status(200).json({ message: "Report received and saved to database" });
+    res.status(200).json({ message: "Report saved", id: reportRow?.id });
   } catch (err) {
-    console.error("Error saving report to database:", err);
-    res.status(500).json({ message: "Error saving report" });
+    console.error("Unexpected error saving report:", err);
+    res.status(500).json({ message: "Unexpected server error", details: String(err) });
   }
 });
 

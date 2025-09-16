@@ -172,6 +172,9 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
   const [showSug, setShowSug] = useState(false);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState("");
+  // New fields for hazard and severity
+  const [hazardType, setHazardType] = useState("");
+  const [severity, setSeverity] = useState(3);
   const hasWeatherKey = !!import.meta.env.VITE_WEATHERAPI_KEY;
   const filteredCities = useMemo(() => {
     const source = stateName && CITIES_BY_STATE[stateName] ? CITIES_BY_STATE[stateName] : getAllCities();
@@ -214,6 +217,8 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
       setShortDesc("");
       setLongDesc("");
       setName("");
+      setHazardType("");
+      setSeverity(3);
       setBusy(false);
       setError("");
     }
@@ -366,6 +371,13 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
       if (!name.trim()) {
         throw new Error("Please enter your name");
       }
+      if (!hazardType) {
+        throw new Error("Please select a hazard type");
+      }
+      const sevNum = Number(severity);
+      if (!Number.isInteger(sevNum) || sevNum < 1 || sevNum > 5) {
+        throw new Error("Please select severity between 1 and 5");
+      }
 
       const mediaType = file?.type?.startsWith("video/") ? "video" : (file?.type?.startsWith("image/") ? "image" : "unknown");
 
@@ -377,13 +389,22 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
       if (lat) form.append("lat", String(Number(lat)));
       if (lon) form.append("lon", String(Number(lon)));
       form.append("timestamp", timestamp);
+      form.append("hazardType", hazardType);
+      form.append("severity", String(severity));
       form.append("mediaType", mediaType);
       if (file) form.append("media", file, file.name);
 
-      await fetch("http://localhost:5000/inform", {
+      const resp = await fetch("http://localhost:5000/inform", {
         method: "POST",
         body: form,
       });
+
+      if (!resp.ok) {
+        // Try to extract detailed error from backend
+        let details = "";
+        try { const j = await resp.json(); details = j.details || j.message || ""; } catch (_) {}
+        throw new Error(details || `Server error (${resp.status}) while saving report`);
+      }
 
       onSubmitted?.({
         city: city.trim(),
@@ -395,6 +416,7 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
       });
       onClose();
     } catch (err) {
+      alert(err?.message || "Failed to submit report");
       setError(err?.message || "Failed to submit report");
     } finally {
       setBusy(false);
@@ -580,6 +602,41 @@ function ReportOverlay({ open, onClose, onSubmitted, currentLang }) {
                 </div>
               </>
             )}
+          </div>
+
+          {/* Hazard type and Severity */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={{ fontWeight: 600 }}>Hazard type</label>
+              <select
+                value={hazardType}
+                onChange={(e) => setHazardType(e.target.value)}
+                style={inputStyle}
+              >
+                <option value="">Select hazard</option>
+                <option value="Tsunami">Tsunami</option>
+                <option value="Extreme waves">Extreme waves</option>
+                <option value="Cyclones / storm surges">Cyclones / storm surges</option>
+                <option value="Coastal flooding">Coastal flooding</option>
+                <option value="Rip current">Rip current</option>
+                <option value="Fish kills">Fish kills</option>
+                <option value="Oil spill">Oil spill</option>
+                <option value="Coastal erosion">Coastal erosion</option>
+                <option value="Others">Others</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontWeight: 600 }}>Severity (1–5)</label>
+              <select
+                value={severity}
+                onChange={(e) => setSeverity(Number(e.target.value))}
+                style={inputStyle}
+              >
+                {[1,2,3,4,5].map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Short description */}
