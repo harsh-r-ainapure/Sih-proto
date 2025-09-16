@@ -28,34 +28,104 @@ const Map = () => {
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(leafletMap);
 
-    // Provided coordinates (lat, lon)
-    // Provided coordinates grouped roughly by region with simple weights
-    const group1 = [
-      [23.5338, 68.4929],
-      [23.5133, 68.5004],
-      [23.5193, 68.5564],
-      [23.30443, 68.67691],
-      [23.23082, 68.68343],
-      [23.26597, 68.76274],
-    ];
-    const group2 = [
-      [19.5062, 72.7625],
-      [19.2652, 72.7851],
-      [19.2905, 72.9087],
-    ];
-    const group3 = [
-      [13.0027, 74.7894],
-      [12.8742, 74.9604],
-      [12.7992, 74.8485],
-    ];
+    const USE_GEOJSON = true;
+    if (USE_GEOJSON) {
+      (async () => {
+        try {
+          const [pointsRes, clustersRes, hotspotsRes] = await Promise.all([
+            fetch("/data/points.geojson"),
+            fetch("/data/clusters.geojson"),
+            fetch("/data/hotspots.geojson"),
+          ]);
+          const [pointsGj, clustersGj, hotspotsGj] = await Promise.all([
+            pointsRes.json(),
+            clustersRes.json(),
+            hotspotsRes.json(),
+          ]);
 
-    // Heavier weight for northern cluster, medium for central, light for southern
-    const hazardPoints = [
-      ...group1.map(([lat, lon]) => ({ lat, lon, report_count: 3 })),
-      // Mumbai cluster: force highest severity
-      ...group2.map(([lat, lon]) => ({ lat, lon, report_count: 5 })),
-      ...group3.map(([lat, lon]) => ({ lat, lon, report_count: 1 })),
-    ];
+          const features = pointsGj.features || [];
+          const max_count = features.reduce((m, f) => Math.max(m, f.properties?.report_count || 0), 0);
+
+          const pointsLayer = L.layerGroup();
+          const simpleColor = (rc) => {
+            const ratio = max_count ? rc / max_count : 0;
+            if (ratio >= 0.8) return "#d73027";
+            if (ratio >= 0.6) return "#f46d43";
+            if (ratio >= 0.4) return "#fdae61";
+            if (ratio >= 0.2) return "#fee08b";
+            return "#d9ef8b";
+          };
+          const latlngs = [];
+          features.forEach((f) => {
+            if (!f.geometry || f.geometry.type !== "Point") return;
+            const [lon, lat] = f.geometry.coordinates;
+            const rc = f.properties?.report_count || 0;
+            latlngs.push([lat, lon]);
+            const radius = 0.8 + (max_count ? (rc / max_count) * 1.7 : 0);
+            L.circleMarker([lat, lon], { radius, color: simpleColor(rc), weight: 0.5, fillOpacity: 0.8 })
+              .bindPopup(`<b>Reports:</b> ${rc}<br><b>Group:</b> ${f.properties?.group_id ?? ''}<br><b>Cluster:</b> ${f.properties?.cluster ?? ''}`)
+              .addTo(pointsLayer);
+          });
+
+          const heatData = features
+            .filter((f) => f.geometry && f.geometry.type === "Point")
+            .map((f) => {
+              const [lon, lat] = f.geometry.coordinates;
+              const rc = f.properties?.report_count || 0;
+              const kde = f.properties?.kde_norm || 0;
+              return [lat, lon, rc * 1.5 + (max_count * 0.8 * kde)];
+            });
+          const heatLayer = L.heatLayer(heatData, {
+            radius: 18,
+            blur: 20,
+            minOpacity: 0.4,
+            maxZoom: 10,
+            gradient: { 0.0: "#000080", 0.15: "#0040FF", 0.3: "#0080FF", 0.45: "#00FFFF", 0.6: "#80FF00", 0.75: "#FFFF00", 0.85: "#FF8000", 1.0: "#FF0000" },
+          });
+
+          const dbscanLayer = L.geoJSON(clustersGj, {
+            style: () => ({ color: "#377eb8", weight: 3, fillOpacity: 0.15 }),
+            onEachFeature: (feat, layer) => {
+              const p = feat.properties || {};
+              layer.bindPopup(`Cluster ${p.cluster} | Size: ${p.size} | Total Reports: ${p.total_reports}`);
+            },
+          });
+
+          const hotspotsLayer = L.geoJSON(hotspotsGj, {
+            style: () => ({ color: "#8B0000", weight: 2, fillOpacity: 0.4 }),
+            onEachFeature: (feat, layer) => {
+              const p = feat.properties || {};
+              const rc = p.report_count ?? "";
+              const z = p.GiZ ?? "";
+              const gi = p.GiP ?? "";
+              layer.bindPopup(`<b>Hotspot</b><br><b>Reports:</b> ${rc}<br><b>Z-score:</b> ${typeof z === 'number' ? z.toFixed(2) : z}<br><b>Significance:</b> ${typeof gi === 'number' ? gi.toFixed(3) : gi}`);
+            },
+          });
+
+          if (showHeat) heatLayer.addTo(leafletMap);
+          if (showPoints) pointsLayer.addTo(leafletMap);
+          if (showDbscan) dbscanLayer.addTo(leafletMap);
+          if (showHotspots) hotspotsLayer.addTo(leafletMap);
+
+          if (latlngs.length) {
+            const bounds = L.latLngBounds(latlngs);
+            leafletMap.fitBounds(bounds.pad(0.2));
+          }
+        } catch (e) {
+          console.error("Failed loading GeoJSON:", e);
+        }
+      })();
+    } else {
+
+    // Deterministic grouped coastal points and hazard generation (ported from Python)
+    const GLOBAL_SEED = 42;
+    function mulberry32(a){return function(){let t=(a+=0x6d2b79f5);t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+    function rngInt(r,min,maxInc){return Math.floor(r()*(maxInc-min+1))+min;}
+    function rngNormal(r){const u=Math.max(r(),1e-9);const v=Math.max(r(),1e-9);return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}    
+    function generateGroup(lat,lon,n,spread=0.9){let count=n; if(count==null){const localSeed=(Math.floor((lat+lon)*100000)^GLOBAL_SEED)>>>0;const rr=mulberry32(localSeed);count=rngInt(rr,10,20);}const seed=((Math.floor(lat*1000+lon*1000)>>>0)^GLOBAL_SEED)>>>0;const r=mulberry32(seed);const pts=[];for(let i=0;i<count;i++){const dlat=rngNormal(r)*(spread/2);const dlon=rngNormal(r)*(spread/2);pts.push([lat+dlat,lon+dlon]);}return pts;}
+    const coastalPoints=[[23.5,68.5],[20.0,72.8],[13.0,74.8],[10.0,76.2],[8.4,77.0],[12.8,80.3],[15.5,80.0],[17.7,83.3],[19.8,85.8],[21.6,87.5],[22.2,88.1],[15.0,73.8],[9.3,79.0],[16.7,82.2],[18.5,84.0],[11.0,75.8],[21.0,69.1],[20.7,70.9],[22.0,72.5],[22.6,88.3]];
+    const groups=coastalPoints.map(([lat,lon])=>generateGroup(lat,lon,null,0.9));
+    const hazardPoints=[]; groups.forEach((grp,giIdx)=>{const gi=giIdx+1;const r=mulberry32(((gi*9973)^GLOBAL_SEED)>>>0);const isHigh=r()<0.25;const base=isHigh?rngInt(r,12,24):rngInt(r,1,11);grp.forEach(([lat,lon])=>{const variation=rngInt(r,-3,3);const rc=Math.max(1,base+variation);hazardPoints.push({lat,lon,report_count:rc,group_id:gi});});});
 
     const max_count = Math.max(...hazardPoints.map((p) => p.report_count));
 
@@ -83,19 +153,28 @@ const Map = () => {
     });
 
     
-    const heatData = hazardPoints.map((p) => [p.lat, p.lon, p.report_count]);
+    // Adaptive KDE-like density in WebMercator meters and enhanced heat weights
+    function projectToMeters([lat, lon]){
+      const x=(lon*Math.PI)/180; const y=(lat*Math.PI)/180; const R=6378137;
+      return [R*x, R*Math.log(Math.tan(Math.PI/4 + y/2))];
+    }
+    const coordsM = hazardPoints.map(p=>projectToMeters([p.lat,p.lon]));
+    function euclid(a,b){const dx=a[0]-b[0]; const dy=a[1]-b[1]; return Math.hypot(dx,dy);}    
+    const sampN = Math.min(coordsM.length, 120);
+    const dists=[]; for(let i=0;i<sampN;i+=3){for(let j=i+1;j<sampN;j+=7){dists.push(euclid(coordsM[i],coordsM[j]));}}
+    const meanDist = dists.length? dists.reduce((a,b)=>a+b,0)/dists.length : 20000;
+    const stdDist = dists.length? Math.sqrt(dists.reduce((s,v)=>{const d=v-meanDist; return s+d*d;},0)/dists.length):20000;
+    const bw = Math.max(10000, Math.min(stdDist * Math.pow(coordsM.length || 1, -1/5), 40000));
+    const dens = coordsM.map((p)=>{let sum=0; for(let j=0;j<coordsM.length;j++){const u=euclid(p,coordsM[j])/bw; sum+=Math.exp(-0.5*u*u);} return sum;});
+    const dmin=Math.min(...dens); const dmax=Math.max(...dens);
+    const densNorm = dens.map(v => (v - dmin) / (dmax - dmin + 1e-12));
+    const heatData = hazardPoints.map((p,i)=>[p.lat,p.lon, p.report_count*1.5 + densNorm[i]*Math.max(...hazardPoints.map(h=>h.report_count))*0.8]);
     const heatLayer = L.heatLayer(heatData, {
-      radius: 28,
-      blur: 22,
-      minOpacity: 0.5,
-      maxZoom: 18,
-      // green -> yellow -> orange -> red
-      gradient: {
-        0.0: "#1a9641",
-        0.33: "#ffff33",
-        0.66: "#fdae61",
-        1.0: "#d7191c",
-      },
+      radius: 18,
+      blur: 20,
+      minOpacity: 0.4,
+      maxZoom: 10,
+      gradient: { 0.0:'#000080', 0.15:'#0040FF', 0.3:'#0080FF', 0.45:'#00FFFF', 0.6:'#80FF00', 0.75:'#FFFF00', 0.85:'#FF8000', 1.0:'#FF0000' }
     });
 
     // DBSCAN clusters (simple client-side implementation)
@@ -141,7 +220,7 @@ const Map = () => {
       }
       return clusterIds;
     }
-    const clusterIds = dbscan(hazardPoints, 60, 2);
+    const clusterIds = dbscan(hazardPoints, 35, 3);
     const dbscanLayer = L.layerGroup();
     const palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
 
@@ -188,14 +267,22 @@ const Map = () => {
         .addTo(dbscanLayer);
     });
 
-   // Hotspots: fixed 15km radius around each hazard point
+    // Simplified Gi* hotspots using kNN z-score of report_count
+    function knnIndices(points, k){
+      const idx=[]; for(let i=0;i<points.length;i++){const d=points.map((q,j)=>({j,d:haversineKm(points[i],q)})); d.sort((a,b)=>a.d-b.d); idx.push(d.slice(1,Math.min(k+1,d.length)).map(o=>o.j)); } return idx;
+    }
+    const K = Math.min(6, Math.max(1, hazardPoints.length - 1));
+    const knn = knnIndices(hazardPoints, K);
+    const values = hazardPoints.map(p=>p.report_count);
+    const mean = values.reduce((a,b)=>a+b,0)/values.length;
+    const std = Math.sqrt(values.reduce((s,v)=>{const d=v-mean; return s+d*d;},0)/Math.max(1,values.length-1));
+    const zScores = hazardPoints.map((_,i)=>{const neigh=knn[i]; const sum=neigh.reduce((s,j)=>s+values[j], values[i]); const m=neigh.length+1; const localMean=sum/m; return std>0? (localMean-mean)/std : 0;});
+    const hotspots = hazardPoints.map((p,i)=>({p,i})).filter(({p,i})=> zScores[i]>1.5 && p.report_count>=6);
     const hotspotsLayer = L.layerGroup();
-    hazardPoints.forEach((p) => {
-      const ratio = p.report_count / max_count;
-      const color = ratio >= 0.75 ? "#d7191c" : ratio >= 0.5 ? "#fdae61" : ratio >= 0.25 ? "#ffff33" : "#1a9641";
-      L.circle([p.lat, p.lon], { radius: 5000, color, weight: 2, fillOpacity: 0.15 })
-        .bindPopup(`Hotspot radius 15km\nIntensity: ${p.report_count}`)
-       .addTo(hotspotsLayer);
+    hotspots.forEach(({p,i})=>{
+      L.circle([p.lat,p.lon], { radius: 6000, color: "#8B0000", weight: 2, fillOpacity: 0.4 })
+        .bindPopup(`<b>Hotspot</b><br><b>Reports:</b> ${p.report_count}<br><b>Z-score:</b> ${zScores[i].toFixed(2)}`)
+        .addTo(hotspotsLayer);
     });
 
     // Initial visibility based on toggle state
@@ -216,6 +303,8 @@ const Map = () => {
     if (hazardPoints.length > 0) {
       const bounds = L.latLngBounds(hazardPoints.map((p) => [p.lat, p.lon]));
       leafletMap.fitBounds(bounds.pad(0.2));
+    }
+
     }
 
     setMap(leafletMap);

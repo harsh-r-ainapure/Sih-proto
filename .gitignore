@@ -10,6 +10,10 @@
 *.userosscache
 *.sln.docstates
 *.env
+.env
+.env.local
+.env.development
+.env.production
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -47,6 +51,41 @@ bld/
 
 # Visual Studio 2017 auto generated files
 Generated\ Files/
+
+# Node / JS
+node_modules/
+**/node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+.parcel-cache/
+.next/
+.turbo/
+
+# Python / Analytics
+.venv/
+**/.venv/
+venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
 # MSTest test Results
 [Tt]est[Rr]esult*/

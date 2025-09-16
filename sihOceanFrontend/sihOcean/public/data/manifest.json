@@ -1,0 +1,11 @@
+{
+  "points": "sihOceanFrontend/sihOcean/public/data/points.geojson",
+  "clusters": "sihOceanFrontend/sihOcean/public/data/clusters.geojson",
+  "hotspots": "sihOceanFrontend/sihOcean/public/data/hotspots.geojson",
+  "stats": {
+    "num_points": 305,
+    "num_clusters": 20,
+    "num_hotspots": 16,
+    "avg_reports": 10.111475409836066
+  }
+}
