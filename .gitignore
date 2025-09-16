@@ -81,11 +81,14 @@ __pycache__/
 .DS_Store
 Thumbs.db
 .idea/
+.vscode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+.zencoder/rules
+.zencoder
 
 # MSTest test Results
 [Tt]est[Rr]esult*/
