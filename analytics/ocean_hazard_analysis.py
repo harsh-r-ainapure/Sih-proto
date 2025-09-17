@@ -120,12 +120,60 @@ def simulate_elevation(lat, lon):
     return elevation
 
 
-def generate_safe_spots_around_location(center_lat, center_lon, radius_km=10, min_elevation_ft=10):
+def get_user_location_elevation(lat, lon):
+    """
+    Get elevation for user's current location
+    """
+    try:
+        elevation = get_elevation_batch([(lat, lon)])[0]
+        return elevation
+    except Exception as e:
+        print(f"Error getting user elevation: {e}")
+        return simulate_elevation(lat, lon)
+
+
+def generate_safe_spots_around_location(center_lat, center_lon, radius_km=10, min_elevation_ft=10, 
+                                       user_elevation_m=None, average_tsunami_height_m=25):
     """
     Generate safe spots within radius_km of the given location with elevation > min_elevation_ft
+    
+    Parameters:
+    - center_lat, center_lon: User's current location
+    - radius_km: Search radius for safe spots
+    - min_elevation_ft: Minimum elevation for safe spots in feet
+    - user_elevation_m: User's current elevation in meters (if None, will be fetched)
+    - average_tsunami_height_m: Average tsunami wave height in meters (default 25m)
+    
+    Returns:
+    - If user elevation > tsunami level: returns a message indicating safety
+    - If user elevation <= tsunami level: returns elevated safe spots
     """
     safe_spots = []
     min_elevation_m = min_elevation_ft * 0.3048  # Convert feet to meters
+    
+    # Get user's current elevation if not provided
+    if user_elevation_m is None:
+        print(f"Getting elevation for user location ({center_lat}, {center_lon})...")
+        user_elevation_m = get_user_location_elevation(center_lat, center_lon)
+    
+    print(f"User elevation: {user_elevation_m:.1f}m, Average tsunami level: {average_tsunami_height_m}m")
+    
+    # Check if user is already above tsunami risk level
+    if user_elevation_m > average_tsunami_height_m:
+        print(f"User is at {user_elevation_m:.1f}m elevation, which is above average tsunami level ({average_tsunami_height_m}m)")
+        print("No evacuation needed - you are already at a safe elevation!")
+        return [{
+            'message': 'safe_elevation',
+            'user_elevation_m': user_elevation_m,
+            'tsunami_level_m': average_tsunami_height_m,
+            'safety_status': 'safe',
+            'reason': f'Your current elevation ({user_elevation_m:.1f}m) is above the average tsunami risk level ({average_tsunami_height_m}m)'
+        }]
+    
+    print(f"User is within tsunami risk zone. Finding higher elevation safe spots...")
+    
+    # Ensure minimum elevation for safe spots is above tsunami level
+    required_elevation_m = max(min_elevation_m, average_tsunami_height_m + 5)  # Add 5m safety buffer
     
     # Generate a grid of points within the radius
     # Convert radius to approximate degrees (rough conversion)
@@ -143,7 +191,9 @@ def generate_safe_spots_around_location(center_lat, center_lon, radius_km=10, mi
     for i in range(200):  # Generate 200 candidate points
         # Random angle and distance within radius
         angle = local_rng.uniform(0, 2 * np.pi)
-        distance = local_rng.uniform(0.5, radius_deg)  # Start 0.5km from center
+        # Ensure minimum distance doesn't exceed radius
+        min_distance = min(0.5 / 111.32, radius_deg * 0.1)  # 0.5km or 10% of radius, whichever is smaller
+        distance = local_rng.uniform(min_distance, radius_deg)
         
         lat = center_lat + distance * np.cos(angle)
         lon = center_lon + distance * np.sin(angle)
@@ -160,18 +210,22 @@ def generate_safe_spots_around_location(center_lat, center_lon, radius_km=10, mi
     print(f"Getting elevation data for {len(candidates)} candidate safe spots...")
     elevations = get_elevation_batch(candidates)
     
-    # Filter points with elevation > min_elevation_m
+    # Filter points with elevation > required_elevation_m
     for (lat, lon), elevation in zip(candidates, elevations):
-        if elevation > min_elevation_m:
+        if elevation > required_elevation_m:
             # Add some additional attributes
             distance_km = np.sqrt((lat - center_lat)**2 + (lon - center_lon)**2) * 111.32
+            elevation_above_tsunami = elevation - average_tsunami_height_m
             safe_spots.append({
                 'lat': lat,
                 'lon': lon,
                 'elevation_m': elevation,
                 'elevation_ft': elevation / 0.3048,
                 'distance_km': distance_km,
-                'safety_score': min(100, (elevation - min_elevation_m) * 10)  # Simple safety score
+                'elevation_above_tsunami_m': elevation_above_tsunami,
+                'safety_score': min(100, elevation_above_tsunami * 5),  # Safety score based on height above tsunami level
+                'user_elevation_m': user_elevation_m,
+                'tsunami_level_m': average_tsunami_height_m
             })
     
     return safe_spots
@@ -255,13 +309,31 @@ def main():
     # Define hotspots selection similar to original
     hotspots = gdf_wgs[(gdf_wgs["GiZ"] > 1.5) & (gdf_wgs["report_count"] >= 6)].copy()
 
-    # Generate safe spots for a default location (center of India's coast)
-    # In practice, this would be called with user's location
-    default_location = (18.5, 78.0)  # Central coastal India
-    safe_spots_data = generate_safe_spots_around_location(
-        default_location[0], default_location[1], 
-        radius_km=10, min_elevation_ft=10
+    # Generate safe spots for different test locations
+    # Test 1: True coastal location (should show safe spots if low elevation)
+    coastal_location = (19.0760, 72.8777)  # Mumbai (coastal, lower elevation)
+    print(f"\n=== Testing coastal location (Mumbai): {coastal_location} ===")
+    coastal_safe_spots = generate_safe_spots_around_location(
+        coastal_location[0], coastal_location[1], 
+        radius_km=10, min_elevation_ft=10, average_tsunami_height_m=25
     )
+    
+    # Test 2: High elevation location like Pune (should show "safe" message)
+    pune_location = (18.5204, 73.8567)  # Pune coordinates
+    print(f"\n=== Testing high elevation location (Pune): {pune_location} ===")
+    pune_safe_spots = generate_safe_spots_around_location(
+        pune_location[0], pune_location[1], 
+        radius_km=10, min_elevation_ft=10, average_tsunami_height_m=25
+    )
+    
+    # Use coastal data for actual file generation (to maintain existing functionality)
+    # In real usage, this would be based on user's actual location
+    safe_spots_data = coastal_safe_spots
+    
+    # Print summary
+    print(f"\n=== Summary ===")
+    print(f"Coastal location safe spots: {len(coastal_safe_spots) if isinstance(coastal_safe_spots, list) and not (len(coastal_safe_spots) == 1 and 'message' in coastal_safe_spots[0]) else 'N/A'}")
+    print(f"Pune location safe spots: {len(pune_safe_spots) if isinstance(pune_safe_spots, list) and not (len(pune_safe_spots) == 1 and 'message' in pune_safe_spots[0]) else 'Safe elevation - no spots needed'}")
 
     # 1) Export points with attributes
     points_out = os.path.join(OUTPUT_DIR, "points.geojson")
@@ -305,22 +377,42 @@ def main():
         gpd.GeoDataFrame(columns=gdf_wgs.columns, geometry=[], crs="EPSG:4326").to_file(hotspots_out, driver="GeoJSON")
 
     # 4) Export safe spots as GeoJSON
-    if safe_spots_data:
+    safespots_out = os.path.join(OUTPUT_DIR, "safespots.geojson")
+    
+    # Check if safe_spots_data contains a safety message instead of actual spots
+    if safe_spots_data and len(safe_spots_data) == 1 and 'message' in safe_spots_data[0]:
+        # User is at safe elevation - create a special message file
+        message_data = safe_spots_data[0]
+        safe_message_gdf = gpd.GeoDataFrame(
+            [message_data],
+            geometry=[Point(0, 0)],  # Dummy geometry
+            crs="EPSG:4326"
+        )
+        safe_message_gdf.to_file(safespots_out, driver="GeoJSON")
+    elif safe_spots_data and len(safe_spots_data) > 0:
+        # Normal safe spots with actual locations
         safe_spots_gdf = gpd.GeoDataFrame(
             safe_spots_data,
             geometry=[Point(spot['lon'], spot['lat']) for spot in safe_spots_data],
             crs="EPSG:4326"
         )
-        safespots_out = os.path.join(OUTPUT_DIR, "safespots.geojson")
         safe_spots_gdf.to_file(safespots_out, driver="GeoJSON")
     else:
         # Create empty safe spots file
-        safespots_out = os.path.join(OUTPUT_DIR, "safespots.geojson")
         empty_safespots = gpd.GeoDataFrame(
             columns=['lat', 'lon', 'elevation_m', 'elevation_ft', 'distance_km', 'safety_score', 'geometry'],
             crs="EPSG:4326"
         )
         empty_safespots.to_file(safespots_out, driver="GeoJSON")
+
+    # Calculate safe spots count for manifest
+    safespots_count = 0
+    is_safe_elevation = False
+    if safe_spots_data and len(safe_spots_data) == 1 and 'message' in safe_spots_data[0]:
+        is_safe_elevation = True
+        safespots_count = 0
+    else:
+        safespots_count = len(safe_spots_data) if safe_spots_data else 0
 
     # Emit a small manifest JSON
     manifest = {
@@ -332,7 +424,8 @@ def main():
             "num_points": int(len(gdf_wgs)),
             "num_clusters": int(len([c for c in gdf_wgs['cluster'].unique() if c != -1])),
             "num_hotspots": int(len(hotspots)),
-            "num_safespots": len(safe_spots_data),
+            "num_safespots": safespots_count,
+            "is_safe_elevation": is_safe_elevation,
             "avg_reports": float(gdf_wgs['report_count'].mean()),
         },
     }
@@ -340,7 +433,10 @@ def main():
         json.dump(manifest, f, indent=2)
 
     print("Ocean Hazard Analytics: GeoJSON export complete")
-    print(f"Generated {len(safe_spots_data)} safe spots around default location")
+    if is_safe_elevation:
+        print("Safe elevation detected - no evacuation spots needed")
+    else:
+        print(f"Generated {safespots_count} safe spots around default location")
     print(json.dumps(manifest, indent=2))
 
 
