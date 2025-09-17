@@ -21,6 +21,7 @@ const supabase = createClient(
 // Your existing multer and express code follows...
 const uploadDir = path.resolve("uploads");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+app.use("/uploads", express.static(uploadDir));
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
@@ -86,6 +87,57 @@ app.post("/inform", (req, res, next) => {
     res.status(200).json({ message: "Report saved", id: reportRow?.id });
   } catch (err) {
     console.error("Unexpected error saving report:", err);
+    res.status(500).json({ message: "Unexpected server error", details: String(err) });
+  }
+});
+
+// Fetch latest reports for frontend map/list
+app.get("/reports", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("reports")
+      .select("id, hazard_type, severity, description, media_urls, created_at, verification_status, location")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (error) {
+      console.error("Supabase reports.select error:", error);
+      return res.status(500).json({ message: "Failed to fetch reports", code: error.code, details: error.details || error.message });
+    }
+
+    const parseCoords = (loc) => {
+      // Try GeoJSON { type, coordinates: [lon, lat] }
+      if (loc && typeof loc === 'object' && Array.isArray(loc.coordinates)) {
+        const [lo, la] = loc.coordinates;
+        return { lat: Number(la), lon: Number(lo) };
+      }
+      // Try WKT string "POINT(lon lat)"
+      if (typeof loc === 'string') {
+        const m = loc.match(/POINT\s*\(\s*([\d.+-]+)\s+([\d.+-]+)\s*\)/i);
+        if (m) return { lon: Number(m[1]), lat: Number(m[2]) };
+      }
+      return { lat: null, lon: null };
+    };
+
+    const items = (data || []).map((r) => {
+      const { lat, lon } = parseCoords(r.location);
+      return {
+        id: r.id,
+        location: "", // city not available in schema
+        disaster: r.hazard_type || "",
+        severity: typeof r.severity === "number" ? r.severity : 3,
+        description: r.description || "",
+        lat: Number.isFinite(lat) ? lat : null,
+        lon: Number.isFinite(lon) ? lon : null,
+        imageUrl: Array.isArray(r.media_urls) && r.media_urls.length ? r.media_urls[0] : null,
+        reportDate: r.created_at,
+        verifiedBy: r.verification_status,
+      };
+    });
+
+    res.json({ items });
+  } catch (err) {
+    console.error("Unexpected error fetching reports:", err);
     res.status(500).json({ message: "Unexpected server error", details: String(err) });
   }
 });

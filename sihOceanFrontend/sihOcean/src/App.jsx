@@ -129,6 +129,7 @@ function App() {
         setOgList,
         currentLang,
         setCurrentLang,
+        setOption, // expose for navigation from children (e.g., Latest -> Map)
       }}
     >
       <Navbar

@@ -3,62 +3,37 @@ import { valueContext } from "../counter/counter";
 import { t } from "../src/utils/i18n";
 
 const Latest = () => {
-  const { currentLang } = useContext(valueContext);
+  const { currentLang, setOption } = useContext(valueContext);
   const [incidents, setIncidents] = useState([]);
 
-  // Sample static incidents that will appear on the map
+  // Fetch latest incidents from backend and auto-refresh
   useEffect(() => {
-    // These incidents match the points shown on the map
-    const staticIncidents = [
-      {
-        id: 1,
-        location: "Mumbai Port",
-        disaster: "Oil Spill",
-        severity: "HIGH",
-        description: "Large oil spill detected near Mumbai port area. Environmental hazard affecting marine life. Immediate cleanup required.",
-        reportedBy: "Marine Patrol Unit",
-        verifiedBy: "Coast Guard",
-        reportDate: "1/15/2024, 4:00:00 PM",
-        verifiedDate: "1/15/2024, 6:00:00 PM",
-        lat: 19.2652,
-        lon: 72.7851,
-        imageUrl: "https://images.unsplash.com/photo-1611273426858-450d8e3c9fce"
-      },
-      {
-        id: 2,
-        location: "Mangalore Coast",
-        disaster: "Coral Bleaching",
-        severity: "MEDIUM",
-        description: "Significant coral bleaching observed along Mangalore coastline. Rising sea temperatures affecting coral reef ecosystem.",
-        reportedBy: "Marine Research Team",
-        verifiedBy: "Environmental Agency",
-        reportDate: "1/12/2024, 10:30:00 AM",
-        verifiedDate: "1/13/2024, 2:15:00 PM",
-        lat: 12.8742,
-        lon: 74.9604,
-        imageUrl: "https://images.unsplash.com/photo-1583212292454-1fe6229603b7"
-      },
-      {
-        id: 3,
-        location: "Gulf of Kutch",
-        disaster: "Industrial Waste Dumping",
-        severity: "HIGH",
-        description: "Illegal industrial waste dumping detected in Gulf of Kutch. Chemical contaminants threatening marine biodiversity.",
-        reportedBy: "Local Fishermen Association",
-        verifiedBy: "Pollution Control Board",
-        reportDate: "1/10/2024, 8:45:00 AM",
-        verifiedDate: "1/11/2024, 11:20:00 AM",
-        lat: 23.5133,
-        lon: 68.5004,
-        imageUrl: "https://images.unsplash.com/photo-1621451537084-482c73073a0f"
+    let timer;
+    const base = import.meta.env.VITE_API_BASE || "";
+    const fetchIncidents = async () => {
+      try {
+        const res = await fetch(`${base}/reports`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const items = Array.isArray(json.items) ? json.items : [];
+        // Map severity number -> label
+        const mapped = items.map((it) => ({
+          ...it,
+          severityLabel: Number(it.severity) >= 4 ? "HIGH" : Number(it.severity) === 3 ? "MEDIUM" : "LOW",
+        }));
+        setIncidents(mapped);
+      } catch (e) {
+        console.error("Failed to fetch incidents:", e);
       }
-    ];
-
-    setIncidents(staticIncidents);
+    };
+    fetchIncidents();
+    timer = setInterval(fetchIncidents, 15000); // refresh every 15s
+    return () => clearInterval(timer);
   }, []);
 
-  const getSeverityColor = (severity) => {
-    switch (severity.toUpperCase()) {
+  const getSeverityColor = (sev) => {
+    const s = typeof sev === "string" ? sev.toUpperCase() : (sev >= 4 ? "HIGH" : sev === 3 ? "MEDIUM" : "LOW");
+    switch (s) {
       case "HIGH":
         return "#d7191c";
       case "MEDIUM":
@@ -70,25 +45,43 @@ const Latest = () => {
     }
   };
 
-  const handleViewOnMap = (lat, lon) => {
-    // Dispatch custom event to center map on this incident
-    window.dispatchEvent(new CustomEvent('mapFocusIncident', { 
-      detail: { lat, lon } 
-    }));
+  const handleViewOnMap = (incident) => {
+    const { lat, lon } = incident || {};
+    if (typeof lat !== 'number' || typeof lon !== 'number') return;
+    // Navigate to map (home) and then focus with context
+    setOption("home");
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('mapFocusIncident', { 
+        detail: { 
+          lat, 
+          lon,
+          description: incident.description,
+          imageUrl: incident.imageUrl,
+          disaster: incident.disaster,
+          severity: incident.severity
+        } 
+      }));
+    }, 0);
   };
 
   return (
-    <div className="latest-incidents">
+    <div className="latest-incidents" style={{ height: 'calc(100vh - 120px)', overflowY: 'auto', paddingRight: 8 }}>
       <h2 style={{ 
         color: "#007BFF", 
-        marginBottom: "20px",
+        margin: "8px 0 16px",
         textAlign: "center",
-        fontSize: "1.5rem"
+        fontSize: "1.4rem",
+        letterSpacing: 0.5
       }}>
         🌊 {t("latest_incidents", currentLang) || "LATEST OCEAN HAZARD INCIDENTS"}
       </h2>
       
-      <div style={{ display: "grid", gap: "20px" }}>
+      <div style={{ 
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+        gap: "16px",
+        alignItems: "start"
+      }}>
         {incidents.map((incident) => (
           <div
             key={incident.id}
@@ -96,17 +89,19 @@ const Latest = () => {
               background: "white",
               border: "1px solid #e0e0e0",
               borderRadius: "12px",
-              padding: "20px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-              transition: "transform 0.2s ease, box-shadow 0.2s ease"
+              padding: "16px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "transform 0.18s ease, box-shadow 0.18s ease",
+              maxWidth: 720,
+              margin: "0 auto"
             }}
             onMouseEnter={(e) => {
-              e.target.style.transform = "translateY(-2px)";
-              e.target.style.boxShadow = "0 4px 16px rgba(0,0,0,0.15)";
+              e.currentTarget.style.transform = "translateY(-2px)";
+              e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.12)";
             }}
             onMouseLeave={(e) => {
-              e.target.style.transform = "translateY(0)";
-              e.target.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)";
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)";
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "15px" }}>
@@ -121,39 +116,43 @@ const Latest = () => {
                     fontSize: "0.8rem",
                     fontWeight: "bold"
                   }}>
-                    {incident.severity}
+                    {incident.severityLabel || incident.severity}
                   </span>
                   <span style={{ fontSize: "0.9rem", color: "#666" }}>{incident.disaster}</span>
                 </div>
               </div>
               <button 
-                onClick={() => handleViewOnMap(incident.lat, incident.lon)}
+                onClick={() => handleViewOnMap(incident)}
                 style={{
                   backgroundColor: "#007BFF",
                   color: "white",
                   border: "none",
-                  borderRadius: "4px",
-                  padding: "5px 10px",
-                  fontSize: "0.8rem",
+                  borderRadius: "6px",
+                  padding: "6px 12px",
+                  fontSize: "0.85rem",
                   cursor: "pointer",
-                  transition: "background-color 0.2s"
+                  transition: "transform 0.1s ease, background-color 0.2s",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)"
                 }}
-                onMouseOver={(e) => e.target.style.backgroundColor = "#0056b3"}
-                onMouseOut={(e) => e.target.style.backgroundColor = "#007BFF"}
+                onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.98)"}
+                onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#0056b3"}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#007BFF"}
               >
                 View on Map
               </button>
             </div>
 
-            {incident.imageUrl && (
-              <div style={{ marginBottom: "15px", borderRadius: "8px", overflow: "hidden", maxHeight: "200px" }}>
+            {incident.imageUrl ? (
+              <div style={{ marginBottom: "15px", borderRadius: "8px", overflow: "hidden", maxHeight: "240px", background: "#f6f8fa" }}>
                 <img 
-                  src={incident.imageUrl} 
-                  alt={incident.disaster} 
-                  style={{ width: "100%", height: "auto", objectFit: "cover" }}
+                  src={incident.imageUrl.startsWith("http") ? incident.imageUrl : `${import.meta.env.VITE_API_BASE || ''}${incident.imageUrl}`}
+                  alt={incident.disaster || 'Report image'} 
+                  style={{ width: "100%", height: "auto", objectFit: "cover", display: 'block' }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
               </div>
-            )}
+            ) : null}
 
             <p style={{ fontSize: "0.95rem", color: "#444", marginBottom: "15px" }}>
               {incident.description}
@@ -161,20 +160,23 @@ const Latest = () => {
 
             <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #eee", paddingTop: "15px" }}>
               <div style={{ fontSize: "0.85rem", color: "#666" }}>
+                {incident.reportedBy ? (
+                  <div>
+                    <span style={{ fontWeight: "500" }}>Reported by:</span> {incident.reportedBy}
+                  </div>
+                ) : null}
                 <div>
-                  <span style={{ fontWeight: "500" }}>Reported by:</span> {incident.reportedBy}
-                </div>
-                <div>
-                  <span style={{ fontWeight: "500" }}>Date:</span> {incident.reportDate}
+                  <span style={{ fontWeight: "500" }}>Date:</span> {incident.reportDate ? new Date(incident.reportDate).toLocaleString() : ''}
                 </div>
               </div>
               <div style={{ fontSize: "0.85rem", color: "#666", textAlign: "right" }}>
-                <div>
-                  <span style={{ fontWeight: "500" }}>Verified by:</span> {incident.verifiedBy}
-                </div>
-                <div>
-                  <span style={{ fontWeight: "500" }}>Date:</span> {incident.verifiedDate}
-                </div>
+                {incident.verifiedBy ? (
+                  <div>
+                    <span style={{ fontWeight: "500" }}>Verified by:</span> {incident.verifiedBy}
+                  </div>
+                ) : null}
+                {/* Keeping space for future verified date if needed */}
+                
               </div>
             </div>
           </div>

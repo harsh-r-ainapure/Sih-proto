@@ -219,9 +219,29 @@ const Map = () => {
     const leafletMap = L.map("map").setView([15, 78], 5);
     
     // Event listener for focusing on incidents from Latest component
+    let focusMarker = null;
     const handleFocusIncident = (event) => {
-      const { lat, lon } = event.detail;
-      leafletMap.setView([lat, lon], 10);
+      const { lat, lon, description, imageUrl, disaster, severity } = event.detail || {};
+      if (typeof lat === 'number' && typeof lon === 'number') {
+        leafletMap.setView([lat, lon], 12);
+        if (focusMarker) {
+          leafletMap.removeLayer(focusMarker);
+          focusMarker = null;
+        }
+        const sev = Number(severity);
+        const color = isFinite(sev) ? (sev >= 4 ? '#d7191c' : sev === 3 ? '#fdae61' : '#1a9641') : '#007bff';
+        const img = imageUrl ? ((imageUrl || '').startsWith('http') ? imageUrl : (import.meta.env.VITE_API_BASE || '') + imageUrl) : null;
+        const popup = `
+          <div style="max-width:240px">
+            <div style="font-weight:600;margin-bottom:6px">${disaster || ''}</div>
+            ${img ? `<div style=\"margin-bottom:8px\"><img src=\"${img}\" style=\"width:100%;height:auto;border-radius:6px;object-fit:cover\"/></div>` : ''}
+            <div style="font-size:12px;color:#666">${description || ''}</div>
+          </div>`;
+        focusMarker = L.circleMarker([lat, lon], { radius: 7, color, weight: 3, fillOpacity: 0.9 })
+          .addTo(leafletMap)
+          .bindPopup(popup)
+          .openPopup();
+      }
     };
     
     window.addEventListener('mapFocusIncident', handleFocusIncident);
@@ -229,7 +249,42 @@ const Map = () => {
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(leafletMap);
 
-    const USE_GEOJSON = true;
+    // Fetch dynamic reports and place markers with popups
+    (async () => {
+      try {
+        const base = import.meta.env.VITE_API_BASE || "";
+        const r = await fetch(`${base}/reports`);
+        if (r.ok) {
+          const { items } = await r.json();
+          const markerLayer = L.layerGroup();
+          const latlngs = [];
+          items.forEach((it) => {
+            if (typeof it.lat === 'number' && typeof it.lon === 'number') {
+              latlngs.push([it.lat, it.lon]);
+              const sev = Number(it.severity);
+              const color = sev >= 4 ? '#d7191c' : sev === 3 ? '#fdae61' : '#1a9641';
+              const content = `
+                <div style="max-width:240px">
+                  <div style="font-weight:600;margin-bottom:6px">${it.location || ''}</div>
+                  <div style="margin-bottom:6px;color:#555">${it.disaster || ''}</div>
+                  ${it.imageUrl ? `<div style="margin-bottom:8px"><img src="${(it.imageUrl || '').startsWith('http') ? it.imageUrl : (import.meta.env.VITE_API_BASE || '') + it.imageUrl}" style="width:100%;height:auto;border-radius:6px;object-fit:cover"/></div>` : ''}
+                  <div style="margin-bottom:8px">${it.description || ''}</div>
+                  <div style="font-size:12px;color:#666">Severity: ${isFinite(sev) ? sev : ''} | Date: ${it.reportDate ? new Date(it.reportDate).toLocaleString() : ''}</div>
+                </div>`;
+              L.circleMarker([it.lat, it.lon], { radius: 6, color, weight: 2, fillOpacity: 0.8 })
+                .bindPopup(content)
+                .addTo(markerLayer);
+            }
+          });
+          markerLayer.addTo(leafletMap);
+          if (latlngs.length) leafletMap.fitBounds(L.latLngBounds(latlngs).pad(0.2));
+        }
+      } catch (e) {
+        console.error('Failed to load dynamic report markers:', e);
+      }
+    })();
+
+    const USE_GEOJSON = false;
     if (USE_GEOJSON) {
       (async () => {
         try {
