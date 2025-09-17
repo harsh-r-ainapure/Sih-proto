@@ -6,9 +6,9 @@
   "stats": {
     "num_points": 305,
     "num_clusters": 20,
-    "num_hotspots": 16,
-    "num_safespots": 0,
-    "is_safe_elevation": true,
+    "num_hotspots": 26,
+    "num_safespots": 25,
+    "is_safe_elevation": false,
     "avg_reports": 10.111475409836066
   }
 }

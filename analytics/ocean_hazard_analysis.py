@@ -259,7 +259,7 @@ def main():
             rc = max(1, base_risk + variation)
             hazard_points.append((pt[0], pt[1], rc, gi))
 
-    df = pd.DataFrame(hazard_points, columns=["lat", "lon", "report_count", "group_id"])
+    df = pd.DataFrame(hazard_points, columns=["lat", "lon", "report_count", "group_id"]) # this should be implemented into db(lat lon should be fetched,check how many reports are there from nearby coordinates)
     max_count = float(df["report_count"].max())
 
     # Create geodataframes
@@ -289,7 +289,7 @@ def main():
     # Hotspot detection (Getis-Ord Gi*) in meters space
     gdf_for_gi = gdf_m.copy()
     gdf_for_gi["report_count"] = gdf_for_gi["report_count"].astype(np.float64)
-    k_neighbors = min(6, len(gdf_for_gi) - 1)
+    k_neighbors = min(4, len(gdf_for_gi) - 1)
     if k_neighbors > 0:
         try:
             w = KNN.from_dataframe(gdf_for_gi, k=k_neighbors)
@@ -307,7 +307,7 @@ def main():
     gdf_wgs["GiP"] = gdf_for_gi["GiP"].values
 
     # Define hotspots selection similar to original
-    hotspots = gdf_wgs[(gdf_wgs["GiZ"] > 1.5) & (gdf_wgs["report_count"] >= 6)].copy()
+    hotspots = gdf_wgs[(gdf_wgs["GiZ"] > 1.35) & (gdf_wgs["report_count"] >= 10)].copy()
 
     # Generate safe spots for different test locations
     # Test 1: True coastal location (should show safe spots if low elevation)

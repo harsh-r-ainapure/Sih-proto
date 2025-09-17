@@ -391,7 +391,7 @@ const Map = () => {
             ${img ? `<div style=\"margin-bottom:8px\"><img src=\"${img}\" style=\"width:100%;height:auto;border-radius:6px;object-fit:cover\"/></div>` : ''}
             <div style="font-size:12px;color:#666">${description || ''}</div>
           </div>`;
-        focusMarker = L.circleMarker([lat, lon], { radius: 7, color, weight: 3, fillOpacity: 0.9 })
+        focusMarker = L.circleMarker([lat, lon], { radius: 5, color, weight: 3, fillOpacity: 0.9 })
           .addTo(leafletMap)
           .bindPopup(popup)
           .openPopup();
@@ -425,7 +425,7 @@ const Map = () => {
                   <div style="margin-bottom:8px">${it.description || ''}</div>
                   <div style="font-size:12px;color:#666">Severity: ${isFinite(sev) ? sev : ''} | Date: ${it.reportDate ? new Date(it.reportDate).toLocaleString() : ''}</div>
                 </div>`;
-              L.circleMarker([it.lat, it.lon], { radius: 6, color, weight: 2, fillOpacity: 0.8 })
+              L.circleMarker([it.lat, it.lon], { radius: 4, color, weight: 2, fillOpacity: 0.8 })
                 .bindPopup(content)
                 .addTo(markerLayer);
             }
@@ -486,7 +486,7 @@ const Map = () => {
             const [lon, lat] = f.geometry.coordinates;
             const rc = f.properties?.report_count || 0;
             latlngs.push([lat, lon]);
-            const radius = 0.8 + (max_count ? (rc / max_count) * 1.7 : 0);
+            const radius = 0.5 + (max_count ? (rc / max_count) * 1.2 : 0);
             L.circleMarker([lat, lon], { radius, color: simpleColor(rc), weight: 0.5, fillOpacity: 0.8 })
               .bindPopup(`<b>Reports:</b> ${rc}<br><b>Group:</b> ${f.properties?.group_id ?? ''}<br><b>Cluster:</b> ${f.properties?.cluster ?? ''}`)
               .addTo(pointsLayer);
@@ -629,7 +629,7 @@ const Map = () => {
           : "#1a9641"; // green - very low
 
       L.circleMarker([p.lat, p.lon], {
-        radius: 5,
+        radius: 2,
         color,
         weight: 1,
         fillOpacity: 0.85,
@@ -741,7 +741,7 @@ const Map = () => {
       if (pts.length === 1) {
         const p = pts[0];
         const color = palette[cid % palette.length];
-        L.circleMarker([p.lat, p.lon], { radius: 6, color, weight: 2, fillOpacity: 0.7 })
+        L.circleMarker([p.lat, p.lon], { radius: 4, color, weight: 2, fillOpacity: 0.7 })
           .bindPopup(`Cluster #${cid}`)
           .addTo(dbscanLayer);
         return;
