@@ -156,18 +156,18 @@ def generate_safe_spots_around_location(center_lat, center_lon, radius_km=10, mi
         print(f"Getting elevation for user location ({center_lat}, {center_lon})...")
         user_elevation_m = get_user_location_elevation(center_lat, center_lon)
     
-    print(f"User elevation: {user_elevation_m:.1f}m, Average tsunami level: {average_tsunami_height_m}m")
+    print(f"User elevation: {user_elevation_m:.1f}m, High tsunami level: {average_tsunami_height_m}m")
     
     # Check if user is already above tsunami risk level
     if user_elevation_m > average_tsunami_height_m:
-        print(f"User is at {user_elevation_m:.1f}m elevation, which is above average tsunami level ({average_tsunami_height_m}m)")
+        print(f"User is at {user_elevation_m:.1f}m elevation, which is above high tsunami level ({average_tsunami_height_m}m)")
         print("No evacuation needed - you are already at a safe elevation!")
         return [{
             'message': 'safe_elevation',
             'user_elevation_m': user_elevation_m,
             'tsunami_level_m': average_tsunami_height_m,
             'safety_status': 'safe',
-            'reason': f'Your current elevation ({user_elevation_m:.1f}m) is above the average tsunami risk level ({average_tsunami_height_m}m)'
+            'reason': f'Your current elevation ({user_elevation_m:.1f}m) is above the high tsunami risk level ({average_tsunami_height_m}m)'
         }]
     
     print(f"User is within tsunami risk zone. Finding higher elevation safe spots...")
@@ -315,7 +315,7 @@ def main():
     print(f"\n=== Testing coastal location (Mumbai): {coastal_location} ===")
     coastal_safe_spots = generate_safe_spots_around_location(
         coastal_location[0], coastal_location[1], 
-        radius_km=10, min_elevation_ft=10, average_tsunami_height_m=25
+        radius_km=10, min_elevation_ft=10, average_tsunami_height_m=600
     )
     
     # Test 2: High elevation location like Pune (should show "safe" message)
@@ -323,7 +323,7 @@ def main():
     print(f"\n=== Testing high elevation location (Pune): {pune_location} ===")
     pune_safe_spots = generate_safe_spots_around_location(
         pune_location[0], pune_location[1], 
-        radius_km=10, min_elevation_ft=10, average_tsunami_height_m=25
+        radius_km=10, min_elevation_ft=10, average_tsunami_height_m=600
     )
     
     # Use coastal data for actual file generation (to maintain existing functionality)

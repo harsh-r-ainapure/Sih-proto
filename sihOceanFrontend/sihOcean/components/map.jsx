@@ -246,98 +246,125 @@ const Map = () => {
             checkProximityAlerts(lat, lon, hazardData.points, hazardData.hotspots);
           }
 
-          // Load safe spots from backend
-          console.log("Loading safe spots from backend...");
-          const backendData = await loadSafeSpots();
+          // Check user's elevation safety first (using real-time data)
+          const tsunamiLevel = 600; // High tsunami level for maximum safety
+          const isUserSafe = userElevation > tsunamiLevel;
           
-          if (backendData) {
-            const { safeSpotData, manifestData } = backendData;
-            const features = safeSpotData.features || [];
+          console.log(`User elevation: ${userElevation.toFixed(1)}m, Tsunami level: ${tsunamiLevel}m, Safe: ${isUserSafe}`);
+          
+          if (isUserSafe) {
+            // User is at safe elevation based on real-time data
+            showElevationNotification({
+              type: 'safe',
+              userElevation: userElevation,
+              tsunamiLevel: tsunamiLevel,
+              reason: `Your current elevation (${userElevation.toFixed(1)}m) is above the average tsunami risk level (${tsunamiLevel}m)`
+            });
             
-            // Check if it's a safe elevation message or actual safe spots
-            if (manifestData.stats?.is_safe_elevation && features.length === 1 && features[0].properties?.message === 'safe_elevation') {
-              // User is at safe elevation
-              const safetyInfo = features[0].properties;
-              showElevationNotification({
-                type: 'safe',
-                userElevation: safetyInfo.user_elevation_m,
-                tsunamiLevel: safetyInfo.tsunami_level_m,
-                reason: safetyInfo.reason
-              });
+            // Add green circle to show safe zone
+            L.circle([lat, lon], {
+              color: '#4CAF50',
+              fillColor: 'rgba(76, 175, 80, 0.1)',
+              fillOpacity: 0.2,
+              weight: 2,
+              radius: 5000
+            }).addTo(map);
+            
+          } else {
+            // User needs evacuation - load and show safe spots from backend
+            console.log("Loading safe spots from backend...");
+            const backendData = await loadSafeSpots();
+            
+            if (backendData) {
+              const { safeSpotData } = backendData;
+              const features = safeSpotData.features || [];
               
-              // Add green circle to show safe zone
-              L.circle([lat, lon], {
-                color: '#4CAF50',
-                fillColor: 'rgba(76, 175, 80, 0.1)',
-                fillOpacity: 0.2,
-                weight: 2,
-                radius: 5000
-              }).addTo(map);
-              
-            } else if (features.length > 0) {
-              // User needs evacuation - show safe spots
-              const safeSpotLayerGroup = L.layerGroup();
-              
-              features.forEach((feature) => {
-                const props = feature.properties;
-                const coords = feature.geometry.coordinates;
+              if (features.length > 0 && !features[0].properties?.message) {
+                // User needs evacuation - show safe spots
+                const safeSpotLayerGroup = L.layerGroup();
                 
-                const safeSpotIcon = L.divIcon({
-                  className: 'safe-spot-marker',
-                  html: `<div style="
-                    width: 16px; 
-                    height: 16px; 
-                    border-radius: 50%; 
-                    background-color: #4CAF50; 
-                    border: 2px solid white; 
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                  "></div>`,
-                  iconSize: [16, 16],
-                  iconAnchor: [8, 8]
+                features.forEach((feature) => {
+                  const props = feature.properties;
+                  const coords = feature.geometry.coordinates;
+                  
+                  const safeSpotIcon = L.divIcon({
+                    className: 'safe-spot-marker',
+                    html: `<div style="
+                      width: 16px; 
+                      height: 16px; 
+                      border-radius: 50%; 
+                      background-color: #4CAF50; 
+                      border: 2px solid white; 
+                      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                    "></div>`,
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                  });
+
+                  L.marker([coords[1], coords[0]], { icon: safeSpotIcon })
+                    .bindPopup(`
+                      <b>🏔️ Safe Evacuation Spot</b><br>
+                      <b>Elevation:</b> ${props.elevation_ft?.toFixed(1)} ft (${props.elevation_m?.toFixed(1)} m)<br>
+                      <b>Above Tsunami Level:</b> +${props.elevation_above_tsunami_m?.toFixed(1)}m<br>
+                      <b>Distance:</b> ${props.distance_km?.toFixed(2)} km<br>
+                      <b>Safety Score:</b> ${props.safety_score?.toFixed(0)}/100<br>
+                      <hr style="margin: 5px 0;">
+                      <small><b>Your elevation:</b> ${userElevation.toFixed(1)}m<br>
+                      <b>Tsunami risk level:</b> ${tsunamiLevel}m</small>
+                    `)
+                    .addTo(safeSpotLayerGroup);
                 });
 
-                L.marker([coords[1], coords[0]], { icon: safeSpotIcon })
-                  .bindPopup(`
-                    <b>🏔️ Safe Evacuation Spot</b><br>
-                    <b>Elevation:</b> ${props.elevation_ft?.toFixed(1)} ft (${props.elevation_m?.toFixed(1)} m)<br>
-                    <b>Above Tsunami Level:</b> +${props.elevation_above_tsunami_m?.toFixed(1)}m<br>
-                    <b>Distance:</b> ${props.distance_km?.toFixed(2)} km<br>
-                    <b>Safety Score:</b> ${props.safety_score?.toFixed(0)}/100<br>
-                    <hr style="margin: 5px 0;">
-                    <small><b>Your elevation:</b> ${props.user_elevation_m?.toFixed(1)}m<br>
-                    <b>Tsunami risk level:</b> ${props.tsunami_level_m}m</small>
-                  `)
-                  .addTo(safeSpotLayerGroup);
-              });
-
-              if (showSafeSpots) {
-                safeSpotLayerGroup.addTo(map);
+                if (showSafeSpots) {
+                  safeSpotLayerGroup.addTo(map);
+                }
+                setSafeSpotMarkers(safeSpotLayerGroup);
+                
+                showElevationNotification({
+                  type: 'risk',
+                  userElevation: userElevation, // Use real-time elevation from API
+                  tsunamiLevel: tsunamiLevel, // Standard tsunami level
+                  safeSpotCount: features.length
+                });
+                
+                console.log(`Loaded ${features.length} safe spots from backend`);
+                
+                // Add red circle to show risk zone
+                L.circle([lat, lon], {
+                  color: '#FF6B6B',
+                  fillColor: 'rgba(255, 107, 107, 0.1)',
+                  fillOpacity: 0.2,
+                  weight: 2,
+                  radius: 10000
+                }).addTo(map);
+                
+              } else {
+                // No safe spots available - show notification anyway
+                showElevationNotification({
+                  type: 'risk',
+                  userElevation: userElevation,
+                  tsunamiLevel: tsunamiLevel,
+                  safeSpotCount: 0
+                });
+                
+                // Add red circle to show risk zone
+                L.circle([lat, lon], {
+                  color: '#FF6B6B',
+                  fillColor: 'rgba(255, 107, 107, 0.1)',
+                  fillOpacity: 0.2,
+                  weight: 2,
+                  radius: 10000
+                }).addTo(map);
               }
-              setSafeSpotMarkers(safeSpotLayerGroup);
-              
+            } else {
+              // Failed to load backend data - show notification anyway
               showElevationNotification({
                 type: 'risk',
-                userElevation: features[0].properties.user_elevation_m,
-                tsunamiLevel: features[0].properties.tsunami_level_m,
-                safeSpotCount: features.length
+                userElevation: userElevation,
+                tsunamiLevel: tsunamiLevel,
+                safeSpotCount: 0
               });
-              
-              console.log(`Loaded ${features.length} safe spots from backend`);
-              
-              // Add red circle to show risk zone
-              L.circle([lat, lon], {
-                color: '#FF6B6B',
-                fillColor: 'rgba(255, 107, 107, 0.1)',
-                fillOpacity: 0.2,
-                weight: 2,
-                radius: 10000
-              }).addTo(map);
-              
-            } else {
-              alert("No safe spots available in the backend data.");
             }
-          } else {
-            alert("Failed to load safe spot data from backend.");
           }
 
           map.setView([lat, lon], 12);
