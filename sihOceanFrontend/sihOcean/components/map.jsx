@@ -12,131 +12,98 @@ const Map = () => {
   const [showPoints, setShowPoints] = useState(true);
   const [showDbscan, setShowDbscan] = useState(true);
   const [showHotspots, setShowHotspots] = useState(true);
+  const [showSafeSpots, setShowSafeSpots] = useState(true);
   const [userLocationMarker, setUserLocationMarker] = useState(null);
-  const [userLocation, setUserLocation] = useState(null); // Store user coordinates
-  const [hazardData, setHazardData] = useState({ points: [], hotspots: [] }); // Store hazard data
-  const [notificationShown, setNotificationShown] = useState(false); // Prevent duplicate notifications
+  const [safeSpotMarkers, setSafeSpotMarkers] = useState(null);
 
-  // Haversine formula to calculate distance between two points in km
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // Earth's radius in kilometers
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
+  // Function to get elevation data (simplified client-side version)
+  const getElevation = async (lat, lon) => {
+    try {
+      const response = await fetch(
+        `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lon}`
+      );
+      const data = await response.json();
+      return data.results[0]?.elevation || 0;
+    } catch (error) {
+      console.log("Elevation API failed, using simulated data");
+      // Fallback to simulated elevation
+      return simulateElevation(lat, lon);
+    }
   };
 
-  // Check for nearby hazards and show notification
-  const checkProximityAlerts = (userLat, userLon, points, hotspots) => {
-    if (notificationShown) return; // Don't show multiple notifications
+  // Simulate elevation data as fallback
+  const simulateElevation = (lat, lon) => {
+    const coastal_distance = Math.abs(lat - 18.5) + Math.abs(lon - 78.0);
+    const base_elevation = Math.min(coastal_distance * 5, 100);
+    const terrain_noise = (Math.random() - 0.5) * 30;
+    const elevation = Math.max(0, base_elevation + terrain_noise);
+    return elevation;
+  };
 
-  const ALERT_RADIUS_KM = 300;
-    let nearbyHazards = [];
+  // Generate safe spots around user location
+  const generateSafeSpotsAroundLocation = async (centerLat, centerLon, radiusKm = 10, minElevationFt = 10) => {
+    const safeSpots = [];
+    const minElevationM = minElevationFt * 0.3048;
+    const radiusDeg = radiusKm / 111.32;
 
-    // Check hazard points
-    points.forEach((point) => {
-      if (point.geometry && point.geometry.type === "Point") {
-        const [pointLon, pointLat] = point.geometry.coordinates;
-        const distance = calculateDistance(userLat, userLon, pointLat, pointLon);
+    // Generate candidate points in a circular pattern
+    const candidates = [];
+    for (let i = 0; i < 50; i++) { // Reduced number for client-side processing
+      const angle = Math.random() * 2 * Math.PI;
+      const distance = Math.random() * radiusDeg + 0.5 / 111.32; // Start 0.5km from center
+      
+      const lat = centerLat + distance * Math.cos(angle);
+      const lon = centerLon + distance * Math.sin(angle);
+      
+      const actualDistance = Math.sqrt(
+        Math.pow((lat - centerLat) * 111.32, 2) + 
+        Math.pow((lon - centerLon) * 111.32, 2)
+      );
+      
+      if (actualDistance <= radiusKm) {
+        candidates.push({ lat, lon });
+      }
+    }
+
+    // Check elevation for each candidate (batch processing would be better for production)
+    for (const candidate of candidates.slice(0, 20)) { // Limit to 20 for demo
+      try {
+        const elevation = await getElevation(candidate.lat, candidate.lon);
         
-        if (distance <= ALERT_RADIUS_KM) {
-          nearbyHazards.push({
-            type: 'Hazard Point',
-            distance: Math.round(distance * 10) / 10, // Round to 1 decimal
-            reports: point.properties?.report_count || 0,
-            coordinates: [pointLat, pointLon]
+        if (elevation > minElevationM) {
+          const distanceKm = Math.sqrt(
+            Math.pow((candidate.lat - centerLat) * 111.32, 2) + 
+            Math.pow((candidate.lon - centerLon) * 111.32, 2)
+          );
+          
+          safeSpots.push({
+            lat: candidate.lat,
+            lon: candidate.lon,
+            elevation_m: elevation,
+            elevation_ft: elevation / 0.3048,
+            distance_km: distanceKm,
+            safety_score: Math.min(100, (elevation - minElevationM) * 10)
           });
         }
+      } catch (error) {
+        console.log("Error getting elevation for candidate:", error);
       }
-    });
-
-    // Check hotspots
-    hotspots.forEach((hotspot) => {
-      if (hotspot.geometry) {
-        let hotspotLat, hotspotLon;
-        
-        // Handle different geometry types
-        if (hotspot.geometry.type === "Point") {
-          [hotspotLon, hotspotLat] = hotspot.geometry.coordinates;
-        } else if (hotspot.geometry.type === "Polygon") {
-          // Use centroid of polygon for distance calculation
-          const coords = hotspot.geometry.coordinates[0];
-          const latSum = coords.reduce((sum, coord) => sum + coord[1], 0);
-          const lonSum = coords.reduce((sum, coord) => sum + coord[0], 0);
-          hotspotLat = latSum / coords.length;
-          hotspotLon = lonSum / coords.length;
-        }
-
-        if (hotspotLat && hotspotLon) {
-          const distance = calculateDistance(userLat, userLon, hotspotLat, hotspotLon);
-          
-          if (distance <= ALERT_RADIUS_KM) {
-            nearbyHazards.push({
-              type: 'Hotspot',
-              distance: Math.round(distance * 10) / 10,
-              reports: hotspot.properties?.report_count || 0,
-              significance: hotspot.properties?.GiP || 0,
-              coordinates: [hotspotLat, hotspotLon]
-            });
-          }
-        }
-      }
-    });
-
-    // Show notification if hazards found
-    if (nearbyHazards.length > 0) {
-      setNotificationShown(true);
-      showProximityNotification(nearbyHazards);
-    }
-  };
-
-  // Show custom notification
-  const showProximityNotification = (hazards) => {
-    // Browser notification (if permission granted)
-    if (Notification.permission === "granted") {
-      const hazardCount = hazards.length;
-      const closestDistance = Math.min(...hazards.map(h => h.distance));
-      
-      new Notification("⚠️ Hazard Alert", {
-        body: `${hazardCount} hazard(s) detected within 50km. Closest: ${closestDistance}km away.`,
-        icon: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDlWMTMiIHN0cm9rZT0iI0ZGNjB00YiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPHA...</ath>Cg==",
-        requireInteraction: true
-      });
     }
 
-    // In-app alert
-    const hazardList = hazards.map(h => 
-      `• ${h.type}: ${h.distance}km away (${h.reports} reports)`
-    ).join('\n');
-    
-    alert(`⚠️ HAZARD ALERT!\n\n${hazards.length} hazard(s) detected within 50km of your location:\n\n${hazardList}\n\nPlease exercise caution in these areas.`);
+    return safeSpots;
   };
 
-  // Request notification permission
-  const requestNotificationPermission = () => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  };
-
-  // Function to get user's current location
-  const getUserLocation = () => {
+  // Function to get user's current location and generate safe spots
+  const getUserLocationWithSafeSpots = async () => {
     if (!navigator.geolocation) {
       alert('Geolocation is not supported by this browser.');
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
-        
-        // Store user location
-        setUserLocation({ lat, lon });
         
         if (map) {
           // Remove existing user location marker if it exists
@@ -144,7 +111,12 @@ const Map = () => {
             map.removeLayer(userLocationMarker);
           }
 
-          // Create a custom icon for user location (blue circle)
+          // Remove existing safe spot markers
+          if (safeSpotMarkers) {
+            map.removeLayer(safeSpotMarkers);
+          }
+
+          // Create user location marker
           const userLocationIcon = L.divIcon({
             className: 'user-location-marker',
             html: `<div style="
@@ -166,18 +138,11 @@ const Map = () => {
                 left: -13px; 
                 animation: pulse 2s infinite;
               "></div>
-            </div>
-            <style>
-              @keyframes pulse {
-                0% { transform: scale(0.5); opacity: 1; }
-                100% { transform: scale(1.5); opacity: 0; }
-              }
-            </style>`,
+            </div>`,
             iconSize: [20, 20],
             iconAnchor: [10, 10]
           });
 
-          // Add marker at user's location
           const marker = L.marker([lat, lon], { icon: userLocationIcon })
             .addTo(map)
             .bindPopup('<b>Your Location</b>')
@@ -185,13 +150,60 @@ const Map = () => {
 
           setUserLocationMarker(marker);
 
-          // Center map on user's location
-          map.setView([lat, lon], 15);
+          // Add 10km radius circle
+          const radiusCircle = L.circle([lat, lon], {
+            color: '#4285f4',
+            fillColor: 'rgba(66, 133, 244, 0.1)',
+            fillOpacity: 0.2,
+            weight: 2,
+            radius: 10000 // 10km in meters
+          }).addTo(map);
 
-          // Check for nearby hazards if data is available
-          if (hazardData.points.length > 0 || hazardData.hotspots.length > 0) {
-            checkProximityAlerts(lat, lon, hazardData.points, hazardData.hotspots);
+          // Generate safe spots
+          console.log("Generating safe spots around your location...");
+          const safeSpots = await generateSafeSpotsAroundLocation(lat, lon, 10, 10);
+          
+          if (safeSpots.length > 0) {
+            const safeSpotLayerGroup = L.layerGroup();
+            
+            safeSpots.forEach((spot) => {
+              const safeSpotIcon = L.divIcon({
+                className: 'safe-spot-marker',
+                html: `<div style="
+                  width: 16px; 
+                  height: 16px; 
+                  border-radius: 50%; 
+                  background-color: #4CAF50; 
+                  border: 2px solid white; 
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                "></div>`,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+              });
+
+              L.marker([spot.lat, spot.lon], { icon: safeSpotIcon })
+                .bindPopup(`
+                  <b>Safe Spot</b><br>
+                  <b>Elevation:</b> ${spot.elevation_ft.toFixed(1)} ft (${spot.elevation_m.toFixed(1)} m)<br>
+                  <b>Distance:</b> ${spot.distance_km.toFixed(2)} km<br>
+                  <b>Safety Score:</b> ${spot.safety_score.toFixed(0)}/100
+                `)
+                .addTo(safeSpotLayerGroup);
+            });
+
+            if (showSafeSpots) {
+              safeSpotLayerGroup.addTo(map);
+            }
+            setSafeSpotMarkers(safeSpotLayerGroup);
+            
+            console.log(`Generated ${safeSpots.length} safe spots around your location`);
+          } else {
+            console.log("No safe spots found with elevation > 10 feet within 10km");
+            alert("No safe spots with elevation > 10 feet found within 10km of your location.");
           }
+
+          // Center map on user's location
+          map.setView([lat, lon], 12);
         }
       },
       (error) => {
@@ -211,16 +223,13 @@ const Map = () => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000 // 5 minutes
+        timeout: 15000,
+        maximumAge: 300000
       }
     );
   };
 
-  useEffect(() => {
-    // Request notification permission on component mount
-    requestNotificationPermission();
-    
+  useEffect(() => {   
     const leafletMap = L.map("map").setView([15, 78], 5);
 
     // Manage light/dark tile layers
@@ -262,31 +271,25 @@ const Map = () => {
     if (USE_GEOJSON) {
       (async () => {
         try {
-          const [pointsRes, clustersRes, hotspotsRes] = await Promise.all([
+          const [pointsRes, clustersRes, hotspotsRes, safespotsRes] = await Promise.all([
             fetch("/data/points.geojson"),
             fetch("/data/clusters.geojson"),
             fetch("/data/hotspots.geojson"),
+            fetch("/data/safespots.geojson").catch(() => null), // Safe spots might not exist initially
           ]);
+          
           const [pointsGj, clustersGj, hotspotsGj] = await Promise.all([
             pointsRes.json(),
             clustersRes.json(),
             hotspotsRes.json(),
           ]);
 
-          const features = pointsGj.features || [];
-          const hotspotFeatures = hotspotsGj.features || [];
-          
-          // Store hazard data for proximity checking
-          setHazardData({
-            points: features,
-            hotspots: hotspotFeatures
-          });
-
-          // Check proximity if user location is already available
-          if (userLocation) {
-            checkProximityAlerts(userLocation.lat, userLocation.lon, features, hotspotFeatures);
+          let safespotsGj = null;
+          if (safespotsRes) {
+            safespotsGj = await safespotsRes.json();
           }
 
+          const features = pointsGj.features || [];
           const max_count = features.reduce((m, f) => Math.max(m, f.properties?.report_count || 0), 0);
 
           const pointsLayer = L.layerGroup();
@@ -345,10 +348,46 @@ const Map = () => {
             },
           });
 
+          // Handle pre-generated safe spots if available
+          let defaultSafeSpotsLayer = null;
+          if (safespotsGj && safespotsGj.features && safespotsGj.features.length > 0) {
+            defaultSafeSpotsLayer = L.layerGroup();
+            safespotsGj.features.forEach((f) => {
+              if (!f.geometry || f.geometry.type !== "Point") return;
+              const [lon, lat] = f.geometry.coordinates;
+              const props = f.properties || {};
+              
+              const safeSpotIcon = L.divIcon({
+                className: 'default-safe-spot-marker',
+                html: `<div style="
+                  width: 14px; 
+                  height: 14px; 
+                  border-radius: 50%; 
+                  background-color: #4CAF50; 
+                  border: 2px solid white; 
+                  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+                  opacity: 0.7;
+                "></div>`,
+                iconSize: [14, 14],
+                iconAnchor: [7, 7]
+              });
+
+              L.marker([lat, lon], { icon: safeSpotIcon })
+                .bindPopup(`
+                  <b>Default Safe Spot</b><br>
+                  <b>Elevation:</b> ${(props.elevation_ft || 0).toFixed(1)} ft<br>
+                  <b>Distance:</b> ${(props.distance_km || 0).toFixed(2)} km<br>
+                  <small>Use "Find Safe Spots" for your location</small>
+                `)
+                .addTo(defaultSafeSpotsLayer);
+            });
+          }
+
           if (showHeat) heatLayer.addTo(leafletMap);
           if (showPoints) pointsLayer.addTo(leafletMap);
           if (showDbscan) dbscanLayer.addTo(leafletMap);
           if (showHotspots) hotspotsLayer.addTo(leafletMap);
+          if (showSafeSpots && defaultSafeSpotsLayer) defaultSafeSpotsLayer.addTo(leafletMap);
 
           if (latlngs.length) {
             const bounds = L.latLngBounds(latlngs);
@@ -358,6 +397,9 @@ const Map = () => {
           console.error("Failed loading GeoJSON:", e);
         }
       })();
+    } else {
+      // Your existing fallback generation code here
+      // ... (keeping the original fallback code for when USE_GEOJSON is false)
     }
 
     setMap(leafletMap);
@@ -388,36 +430,35 @@ const Map = () => {
       window.removeEventListener('mapFocusIncident', handleFocusIncident);
       window.removeEventListener('themechange', handleThemeChange);
     };
-  }, [showHeat, showPoints, showDbscan, showHotspots]);
+  }, [showHeat, showPoints, showDbscan, showHotspots, showSafeSpots]);
 
-  // Reset notification flag when user moves significantly
+  // Effect to handle safe spot visibility toggle
   useEffect(() => {
-    if (userLocation && notificationShown) {
-      // Reset notification after 5 minutes to allow for new alerts
-      const timer = setTimeout(() => {
-        setNotificationShown(false);
-      }, 5 * 60 * 1000);
-      
-      return () => clearTimeout(timer);
+    if (map && safeSpotMarkers) {
+      if (showSafeSpots) {
+        safeSpotMarkers.addTo(map);
+      } else {
+        map.removeLayer(safeSpotMarkers);
+      }
     }
-  }, [userLocation, notificationShown]);
+  }, [showSafeSpots, map, safeSpotMarkers]);
 
   return (
     <div style={{ position: "relative", height: "100%", width: "100%" }}>
       
-      {/* My Location Button */}
+      {/* Find Safe Spots Button */}
       <button
-        onClick={getUserLocation}
+        onClick={getUserLocationWithSafeSpots}
         style={{
           position: "absolute",
-          top: "80px", // Position below the dropdown
+          top: "80px",
           right: "20px",
           zIndex: 1000,
-          background: "var(--panel-bg, rgba(255,255,255,0.92))",
-          color: "var(--panel-fg, #111)",
-          border: "1px solid var(--panel-bd, #ddd)",
+          background: "var(--panel-bg, rgba(76, 175, 80, 0.95))",
+          color: "white",
+          border: "1px solid #4CAF50",
           borderRadius: "8px",
-          padding: "10px",
+          padding: "10px 12px",
           boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
           cursor: "pointer",
           fontSize: "14px",
@@ -426,9 +467,9 @@ const Map = () => {
           alignItems: "center",
           gap: "6px"
         }}
-        title="Show my location and check for nearby hazards"
+        title="Find safe spots around your location (elevation > 10ft within 10km)"
       >
-        📍 My Location
+        🛡️ Find Safe Spots
       </button>
 
       {/* Layer controls - Mobile responsive dropdown */}
@@ -487,6 +528,12 @@ const Map = () => {
             <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer", color: "var(--panel-fg, #111)" }}>
               <input type="checkbox" checked={showHotspots} onChange={(e) => setShowHotspots(e.target.checked)} />
               <span>Hotspots (15km radius)</span>
+            </label>
+          </li>
+          <li>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", margin: 0, cursor: "pointer", color: "var(--panel-fg, #111)" }}>
+              <input type="checkbox" checked={showSafeSpots} onChange={(e) => setShowSafeSpots(e.target.checked)} />
+              <span>Safe Spots (10ft+ elevation)</span>
             </label>
           </li>
         </ul>

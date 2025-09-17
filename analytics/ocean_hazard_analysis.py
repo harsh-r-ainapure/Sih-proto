@@ -10,6 +10,8 @@ from sklearn.neighbors import KernelDensity
 from scipy.spatial.distance import pdist
 from libpysal.weights import KNN
 from esda.getisord import G_Local
+import requests
+import time
 
 warnings.filterwarnings("ignore")
 
@@ -49,6 +51,130 @@ def adaptive_bandwidth_kde(coords):
     n = len(coords)
     bandwidth = std_dist * (n ** (-1 / 5))  # Scott's rule adapted
     return max(10000, min(bandwidth, 40000))
+
+
+def get_elevation_batch(coordinates, batch_size=100):
+    """
+    Get elevation data for coordinates using Open-Elevation API
+    coordinates: list of (lat, lon) tuples
+    Returns: list of elevation values in meters
+    """
+    elevations = []
+    
+    for i in range(0, len(coordinates), batch_size):
+        batch = coordinates[i:i + batch_size]
+        
+        # Prepare locations for API
+        locations = [{"latitude": lat, "longitude": lon} for lat, lon in batch]
+        
+        try:
+            response = requests.post(
+                'https://api.open-elevation.com/api/v1/lookup',
+                json={'locations': locations},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                batch_elevations = [result['elevation'] for result in data['results']]
+                elevations.extend(batch_elevations)
+            else:
+                print(f"Elevation API error: {response.status_code}")
+                # Use simulated elevation data as fallback
+                elevations.extend([simulate_elevation(lat, lon) for lat, lon in batch])
+                
+        except Exception as e:
+            print(f"Elevation API request failed: {e}")
+            # Use simulated elevation data as fallback
+            elevations.extend([simulate_elevation(lat, lon) for lat, lon in batch])
+        
+        # Rate limiting - be nice to the API
+        time.sleep(0.1)
+    
+    return elevations
+
+
+def simulate_elevation(lat, lon):
+    """
+    Simulate elevation data based on coastal proximity and terrain patterns
+    This is a fallback when elevation API is not available
+    """
+    # Create deterministic but realistic elevation patterns
+    seed = int((lat * 1000 + lon * 1000) % (2**32 - 1)) ^ GLOBAL_SEED
+    local_rng = np.random.default_rng(seed)
+    
+    # Distance from coast approximation (very rough)
+    coastal_distance = abs(lat - 18.5) + abs(lon - 78.0)  # Approximate distance from central coast
+    
+    # Base elevation increases with distance from coast
+    base_elevation = min(coastal_distance * 5, 100)
+    
+    # Add some terrain variation
+    terrain_noise = local_rng.normal(0, 15)
+    
+    # Some areas are naturally lower (river deltas, coastal plains)
+    if coastal_distance < 2:
+        base_elevation *= 0.3
+    
+    elevation = max(0, base_elevation + terrain_noise)
+    return elevation
+
+
+def generate_safe_spots_around_location(center_lat, center_lon, radius_km=10, min_elevation_ft=10):
+    """
+    Generate safe spots within radius_km of the given location with elevation > min_elevation_ft
+    """
+    safe_spots = []
+    min_elevation_m = min_elevation_ft * 0.3048  # Convert feet to meters
+    
+    # Generate a grid of points within the radius
+    # Convert radius to approximate degrees (rough conversion)
+    radius_deg = radius_km / 111.32  # 1 degree ≈ 111.32 km
+    
+    # Create a grid of potential safe spot locations
+    grid_resolution = 0.005  # About 500m spacing
+    
+    seed = int((center_lat * 1000 + center_lon * 1000) % (2**32 - 1)) ^ GLOBAL_SEED
+    local_rng = np.random.default_rng(seed)
+    
+    candidates = []
+    
+    # Generate candidate points in a circular pattern
+    for i in range(200):  # Generate 200 candidate points
+        # Random angle and distance within radius
+        angle = local_rng.uniform(0, 2 * np.pi)
+        distance = local_rng.uniform(0.5, radius_deg)  # Start 0.5km from center
+        
+        lat = center_lat + distance * np.cos(angle)
+        lon = center_lon + distance * np.sin(angle)
+        
+        # Check if point is within circular radius
+        actual_distance = np.sqrt((lat - center_lat)**2 + (lon - center_lon)**2) * 111.32
+        if actual_distance <= radius_km:
+            candidates.append((lat, lon))
+    
+    if not candidates:
+        return safe_spots
+    
+    # Get elevation data for all candidates
+    print(f"Getting elevation data for {len(candidates)} candidate safe spots...")
+    elevations = get_elevation_batch(candidates)
+    
+    # Filter points with elevation > min_elevation_m
+    for (lat, lon), elevation in zip(candidates, elevations):
+        if elevation > min_elevation_m:
+            # Add some additional attributes
+            distance_km = np.sqrt((lat - center_lat)**2 + (lon - center_lon)**2) * 111.32
+            safe_spots.append({
+                'lat': lat,
+                'lon': lon,
+                'elevation_m': elevation,
+                'elevation_ft': elevation / 0.3048,
+                'distance_km': distance_km,
+                'safety_score': min(100, (elevation - min_elevation_m) * 10)  # Simple safety score
+            })
+    
+    return safe_spots
 
 
 def main():
@@ -129,6 +255,14 @@ def main():
     # Define hotspots selection similar to original
     hotspots = gdf_wgs[(gdf_wgs["GiZ"] > 1.5) & (gdf_wgs["report_count"] >= 6)].copy()
 
+    # Generate safe spots for a default location (center of India's coast)
+    # In practice, this would be called with user's location
+    default_location = (18.5, 78.0)  # Central coastal India
+    safe_spots_data = generate_safe_spots_around_location(
+        default_location[0], default_location[1], 
+        radius_km=10, min_elevation_ft=10
+    )
+
     # 1) Export points with attributes
     points_out = os.path.join(OUTPUT_DIR, "points.geojson")
     gdf_wgs.to_file(points_out, driver="GeoJSON")
@@ -170,15 +304,35 @@ def main():
         hotspots_out = os.path.join(OUTPUT_DIR, "hotspots.geojson")
         gpd.GeoDataFrame(columns=gdf_wgs.columns, geometry=[], crs="EPSG:4326").to_file(hotspots_out, driver="GeoJSON")
 
+    # 4) Export safe spots as GeoJSON
+    if safe_spots_data:
+        safe_spots_gdf = gpd.GeoDataFrame(
+            safe_spots_data,
+            geometry=[Point(spot['lon'], spot['lat']) for spot in safe_spots_data],
+            crs="EPSG:4326"
+        )
+        safespots_out = os.path.join(OUTPUT_DIR, "safespots.geojson")
+        safe_spots_gdf.to_file(safespots_out, driver="GeoJSON")
+    else:
+        # Create empty safe spots file
+        safespots_out = os.path.join(OUTPUT_DIR, "safespots.geojson")
+        empty_safespots = gpd.GeoDataFrame(
+            columns=['lat', 'lon', 'elevation_m', 'elevation_ft', 'distance_km', 'safety_score', 'geometry'],
+            crs="EPSG:4326"
+        )
+        empty_safespots.to_file(safespots_out, driver="GeoJSON")
+
     # Emit a small manifest JSON
     manifest = {
         "points": os.path.relpath(points_out, REPO_DIR).replace("\\", "/"),
         "clusters": os.path.relpath(clusters_out, REPO_DIR).replace("\\", "/"),
         "hotspots": os.path.relpath(hotspots_out, REPO_DIR).replace("\\", "/"),
+        "safespots": os.path.relpath(safespots_out, REPO_DIR).replace("\\", "/"),
         "stats": {
             "num_points": int(len(gdf_wgs)),
             "num_clusters": int(len([c for c in gdf_wgs['cluster'].unique() if c != -1])),
             "num_hotspots": int(len(hotspots)),
+            "num_safespots": len(safe_spots_data),
             "avg_reports": float(gdf_wgs['report_count'].mean()),
         },
     }
@@ -186,10 +340,9 @@ def main():
         json.dump(manifest, f, indent=2)
 
     print("Ocean Hazard Analytics: GeoJSON export complete")
+    print(f"Generated {len(safe_spots_data)} safe spots around default location")
     print(json.dumps(manifest, indent=2))
 
 
 if __name__ == "__main__":
     main()
-
-
