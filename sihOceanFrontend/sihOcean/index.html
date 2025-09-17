@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/wave-svgrepo-com.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     
     <!-- Primary Meta Tags -->
     <title>Ocean Hazard Monitoring System</title>
@@ -13,9 +13,24 @@
     <meta name="author" content="Ocean Hazard Team" />
     
     <!-- Theme and PWA Meta Tags -->
+    <!-- Cross-browser: default theme-color + JS to handle dark mode (since media on theme-color isn't widely supported) -->
     <meta name="theme-color" content="#0077be" />
-    <meta name="background-color" content="#ffffff" />
     <meta name="color-scheme" content="light dark" />
+    <script>
+      (function () {
+        // Update theme-color dynamically for browsers that don't support media attribute on theme-color
+        const applyThemeColor = () => {
+          const meta = document.querySelector('meta[name="theme-color"]');
+          if (!meta) return;
+          const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          meta.setAttribute('content', prefersDark ? '#005a91' : '#0077be');
+        };
+        applyThemeColor();
+        if (window.matchMedia) {
+          window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyThemeColor);
+        }
+      })();
+    </script>
     
     <!-- Mobile Web App Capable -->
     <meta name="mobile-web-app-capable" content="yes" />
@@ -36,8 +51,6 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-192x192.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-192x192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
     
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
