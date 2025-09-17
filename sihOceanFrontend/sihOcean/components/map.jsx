@@ -12,7 +12,116 @@ const Map = () => {
   const [showPoints, setShowPoints] = useState(true);
   const [showDbscan, setShowDbscan] = useState(true);
   const [showHotspots, setShowHotspots] = useState(true);
-  const [userLocationMarker, setUserLocationMarker] = useState(null); // Track user location marker
+  const [userLocationMarker, setUserLocationMarker] = useState(null);
+  const [userLocation, setUserLocation] = useState(null); // Store user coordinates
+  const [hazardData, setHazardData] = useState({ points: [], hotspots: [] }); // Store hazard data
+  const [notificationShown, setNotificationShown] = useState(false); // Prevent duplicate notifications
+
+  // Haversine formula to calculate distance between two points in km
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  // Check for nearby hazards and show notification
+  const checkProximityAlerts = (userLat, userLon, points, hotspots) => {
+    if (notificationShown) return; // Don't show multiple notifications
+
+  const ALERT_RADIUS_KM = 300;
+    let nearbyHazards = [];
+
+    // Check hazard points
+    points.forEach((point) => {
+      if (point.geometry && point.geometry.type === "Point") {
+        const [pointLon, pointLat] = point.geometry.coordinates;
+        const distance = calculateDistance(userLat, userLon, pointLat, pointLon);
+        
+        if (distance <= ALERT_RADIUS_KM) {
+          nearbyHazards.push({
+            type: 'Hazard Point',
+            distance: Math.round(distance * 10) / 10, // Round to 1 decimal
+            reports: point.properties?.report_count || 0,
+            coordinates: [pointLat, pointLon]
+          });
+        }
+      }
+    });
+
+    // Check hotspots
+    hotspots.forEach((hotspot) => {
+      if (hotspot.geometry) {
+        let hotspotLat, hotspotLon;
+        
+        // Handle different geometry types
+        if (hotspot.geometry.type === "Point") {
+          [hotspotLon, hotspotLat] = hotspot.geometry.coordinates;
+        } else if (hotspot.geometry.type === "Polygon") {
+          // Use centroid of polygon for distance calculation
+          const coords = hotspot.geometry.coordinates[0];
+          const latSum = coords.reduce((sum, coord) => sum + coord[1], 0);
+          const lonSum = coords.reduce((sum, coord) => sum + coord[0], 0);
+          hotspotLat = latSum / coords.length;
+          hotspotLon = lonSum / coords.length;
+        }
+
+        if (hotspotLat && hotspotLon) {
+          const distance = calculateDistance(userLat, userLon, hotspotLat, hotspotLon);
+          
+          if (distance <= ALERT_RADIUS_KM) {
+            nearbyHazards.push({
+              type: 'Hotspot',
+              distance: Math.round(distance * 10) / 10,
+              reports: hotspot.properties?.report_count || 0,
+              significance: hotspot.properties?.GiP || 0,
+              coordinates: [hotspotLat, hotspotLon]
+            });
+          }
+        }
+      }
+    });
+
+    // Show notification if hazards found
+    if (nearbyHazards.length > 0) {
+      setNotificationShown(true);
+      showProximityNotification(nearbyHazards);
+    }
+  };
+
+  // Show custom notification
+  const showProximityNotification = (hazards) => {
+    // Browser notification (if permission granted)
+    if (Notification.permission === "granted") {
+      const hazardCount = hazards.length;
+      const closestDistance = Math.min(...hazards.map(h => h.distance));
+      
+      new Notification("⚠️ Hazard Alert", {
+        body: `${hazardCount} hazard(s) detected within 50km. Closest: ${closestDistance}km away.`,
+        icon: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDlWMTMiIHN0cm9rZT0iI0ZGNjB00YiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPHA...</ath>Cg==",
+        requireInteraction: true
+      });
+    }
+
+    // In-app alert
+    const hazardList = hazards.map(h => 
+      `• ${h.type}: ${h.distance}km away (${h.reports} reports)`
+    ).join('\n');
+    
+    alert(`⚠️ HAZARD ALERT!\n\n${hazards.length} hazard(s) detected within 50km of your location:\n\n${hazardList}\n\nPlease exercise caution in these areas.`);
+  };
+
+  // Request notification permission
+  const requestNotificationPermission = () => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  };
 
   // Function to get user's current location
   const getUserLocation = () => {
@@ -25,6 +134,9 @@ const Map = () => {
       (position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
+        
+        // Store user location
+        setUserLocation({ lat, lon });
         
         if (map) {
           // Remove existing user location marker if it exists
@@ -75,6 +187,11 @@ const Map = () => {
 
           // Center map on user's location
           map.setView([lat, lon], 15);
+
+          // Check for nearby hazards if data is available
+          if (hazardData.points.length > 0 || hazardData.hotspots.length > 0) {
+            checkProximityAlerts(lat, lon, hazardData.points, hazardData.hotspots);
+          }
         }
       },
       (error) => {
@@ -100,7 +217,10 @@ const Map = () => {
     );
   };
 
-  useEffect(() => {   
+  useEffect(() => {
+    // Request notification permission on component mount
+    requestNotificationPermission();
+    
     const leafletMap = L.map("map").setView([15, 78], 5);
 
     // Manage light/dark tile layers
@@ -154,6 +274,19 @@ const Map = () => {
           ]);
 
           const features = pointsGj.features || [];
+          const hotspotFeatures = hotspotsGj.features || [];
+          
+          // Store hazard data for proximity checking
+          setHazardData({
+            points: features,
+            hotspots: hotspotFeatures
+          });
+
+          // Check proximity if user location is already available
+          if (userLocation) {
+            checkProximityAlerts(userLocation.lat, userLocation.lon, features, hotspotFeatures);
+          }
+
           const max_count = features.reduce((m, f) => Math.max(m, f.properties?.report_count || 0), 0);
 
           const pointsLayer = L.layerGroup();
@@ -225,9 +358,6 @@ const Map = () => {
           console.error("Failed loading GeoJSON:", e);
         }
       })();
-    } else {
-      // ... (rest of the fallback generation code remains the same)
-      // Your existing hazard point generation code here
     }
 
     setMap(leafletMap);
@@ -260,6 +390,18 @@ const Map = () => {
     };
   }, [showHeat, showPoints, showDbscan, showHotspots]);
 
+  // Reset notification flag when user moves significantly
+  useEffect(() => {
+    if (userLocation && notificationShown) {
+      // Reset notification after 5 minutes to allow for new alerts
+      const timer = setTimeout(() => {
+        setNotificationShown(false);
+      }, 5 * 60 * 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [userLocation, notificationShown]);
+
   return (
     <div style={{ position: "relative", height: "100%", width: "100%" }}>
       
@@ -284,7 +426,7 @@ const Map = () => {
           alignItems: "center",
           gap: "6px"
         }}
-        title="Show my location"
+        title="Show my location and check for nearby hazards"
       >
         📍 My Location
       </button>
