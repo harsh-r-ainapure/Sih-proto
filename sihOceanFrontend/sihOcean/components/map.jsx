@@ -15,8 +15,155 @@ const Map = () => {
   const [showSafeSpots, setShowSafeSpots] = useState(true);
   const [userLocationMarker, setUserLocationMarker] = useState(null);
   const [safeSpotMarkers, setSafeSpotMarkers] = useState(null);
+  const [elevationStatus, setElevationStatus] = useState(null);
+  const [showNotification, setShowNotification] = useState(false);
+  
+  // New state for proximity alerts
+  const [hazardData, setHazardData] = useState({ points: [], hotspots: [] });
+  const [userLocation, setUserLocation] = useState(null);
+  const [proximityAlertShown, setProximityAlertShown] = useState(false);
 
-  // Function to get elevation data (simplified client-side version)
+  // Haversine formula to calculate distance between two points in km
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  // Check for nearby hazards and show notification
+  const checkProximityAlerts = (userLat, userLon, points, hotspots) => {
+    if (proximityAlertShown) return; // Don't show multiple notifications
+
+    const ALERT_RADIUS_KM = 300;
+    let nearbyHazards = [];
+
+    // Check hazard points
+    points.forEach((point) => {
+      if (point.geometry && point.geometry.type === "Point") {
+        const [pointLon, pointLat] = point.geometry.coordinates;
+        const distance = calculateDistance(userLat, userLon, pointLat, pointLon);
+        
+        if (distance <= ALERT_RADIUS_KM) {
+          nearbyHazards.push({
+            type: 'Hazard Point',
+            distance: Math.round(distance * 10) / 10,
+            reports: point.properties?.report_count || 0,
+            coordinates: [pointLat, pointLon]
+          });
+        }
+      }
+    });
+
+    // Check hotspots
+    hotspots.forEach((hotspot) => {
+      if (hotspot.geometry) {
+        let hotspotLat, hotspotLon;
+        
+        if (hotspot.geometry.type === "Point") {
+          [hotspotLon, hotspotLat] = hotspot.geometry.coordinates;
+        } else if (hotspot.geometry.type === "Polygon") {
+          // Use centroid of polygon
+          const coords = hotspot.geometry.coordinates[0];
+          const latSum = coords.reduce((sum, coord) => sum + coord[1], 0);
+          const lonSum = coords.reduce((sum, coord) => sum + coord[0], 0);
+          hotspotLat = latSum / coords.length;
+          hotspotLon = lonSum / coords.length;
+        }
+
+        if (hotspotLat && hotspotLon) {
+          const distance = calculateDistance(userLat, userLon, hotspotLat, hotspotLon);
+          
+          if (distance <= ALERT_RADIUS_KM) {
+            nearbyHazards.push({
+              type: 'Hotspot',
+              distance: Math.round(distance * 10) / 10,
+              reports: hotspot.properties?.report_count || 0,
+              significance: hotspot.properties?.GiP || 0,
+              coordinates: [hotspotLat, hotspotLon]
+            });
+          }
+        }
+      }
+    });
+
+    // Show notification if hazards found
+    if (nearbyHazards.length > 0) {
+      setProximityAlertShown(true);
+      showProximityNotification(nearbyHazards);
+    }
+  };
+
+  // Show proximity notification
+  const showProximityNotification = (hazards) => {
+    // Browser notification if permission granted
+    if (Notification.permission === "granted") {
+      const hazardCount = hazards.length;
+      const closestDistance = Math.min(...hazards.map(h => h.distance));
+      
+      new Notification("⚠️ Hazard Alert", {
+        body: `${hazardCount} hazard(s) detected within 50km. Closest: ${closestDistance}km away.`,
+        requireInteraction: true
+      });
+    }
+
+    // In-app alert
+    const hazardList = hazards.map(h => 
+      `• ${h.type}: ${h.distance}km away (${h.reports} reports)`
+    ).join('\n');
+    
+    alert(`⚠️ HAZARD ALERT!\n\n${hazards.length} hazard(s) detected within 50km of your location:\n\n${hazardList}\n\nPlease exercise caution in these areas.`);
+  };
+
+  // Request notification permission
+  const requestNotificationPermission = () => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  };
+
+  // Function to show notification temporarily
+  const showElevationNotification = (status) => {
+    setElevationStatus(status);
+    setShowNotification(true);
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      setShowNotification(false);
+    }, 5000);
+    
+    // Clear elevation status after 6 seconds (to allow fade out)
+    setTimeout(() => {
+      setElevationStatus(null);
+    }, 6000);
+  };
+
+  // Load safe spots from backend-generated data
+  const loadSafeSpots = async () => {
+    try {
+      const [safeSpotRes, manifestRes] = await Promise.all([
+        fetch("/data/safespots.geojson"),
+        fetch("/data/manifest.json")
+      ]);
+      
+      const [safeSpotData, manifestData] = await Promise.all([
+        safeSpotRes.json(),
+        manifestRes.json()
+      ]);
+
+      return { safeSpotData, manifestData };
+    } catch (error) {
+      console.error("Failed to load safe spot data:", error);
+      return null;
+    }
+  };
+
+  // Function to get elevation data (simplified client-side version) 
   const getElevation = async (lat, lon) => {
     try {
       const response = await fetch(
@@ -40,60 +187,7 @@ const Map = () => {
     return elevation;
   };
 
-  // Generate safe spots around user location
-  const generateSafeSpotsAroundLocation = async (centerLat, centerLon, radiusKm = 10, minElevationFt = 10) => {
-    const safeSpots = [];
-    const minElevationM = minElevationFt * 0.3048;
-    const radiusDeg = radiusKm / 111.32;
-
-    // Generate candidate points in a circular pattern
-    const candidates = [];
-    for (let i = 0; i < 50; i++) {
-      const angle = Math.random() * 2 * Math.PI;
-      const distance = Math.random() * radiusDeg + 0.5 / 111.32;
-      
-      const lat = centerLat + distance * Math.cos(angle);
-      const lon = centerLon + distance * Math.sin(angle);
-      
-      const actualDistance = Math.sqrt(
-        Math.pow((lat - centerLat) * 111.32, 2) + 
-        Math.pow((lon - centerLon) * 111.32, 2)
-      );
-      
-      if (actualDistance <= radiusKm) {
-        candidates.push({ lat, lon });
-      }
-    }
-
-    // Check elevation for each candidate
-    for (const candidate of candidates.slice(0, 20)) {
-      try {
-        const elevation = await getElevation(candidate.lat, candidate.lon);
-        
-        if (elevation > minElevationM) {
-          const distanceKm = Math.sqrt(
-            Math.pow((candidate.lat - centerLat) * 111.32, 2) + 
-            Math.pow((candidate.lon - centerLon) * 111.32, 2)
-          );
-          
-          safeSpots.push({
-            lat: candidate.lat,
-            lon: candidate.lon,
-            elevation_m: elevation,
-            elevation_ft: elevation / 0.3048,
-            distance_km: distanceKm,
-            safety_score: Math.min(100, (elevation - minElevationM) * 10)
-          });
-        }
-      } catch (error) {
-        console.log("Error getting elevation for candidate:", error);
-      }
-    }
-
-    return safeSpots;
-  };
-
-  // Function to get user's current location and generate safe spots
+  // Function to get user's current location and load backend safe spots
   const getUserLocationWithSafeSpots = async () => {
     if (!navigator.geolocation) {
       alert('Geolocation is not supported by this browser.');
@@ -105,6 +199,9 @@ const Map = () => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
         
+        // Store user location
+        setUserLocation({ lat, lon });
+        
         if (map) {
           // Remove existing markers
           if (userLocationMarker) {
@@ -113,6 +210,10 @@ const Map = () => {
           if (safeSpotMarkers) {
             map.removeLayer(safeSpotMarkers);
           }
+
+          // Get user's elevation
+          console.log("Getting your elevation...");
+          const userElevation = await getElevation(lat, lon);
 
           // Create user location marker
           const userLocationIcon = L.divIcon({
@@ -131,61 +232,112 @@ const Map = () => {
 
           const marker = L.marker([lat, lon], { icon: userLocationIcon })
             .addTo(map)
-            .bindPopup('<b>Your Location</b>')
+            .bindPopup(`
+              <b>Your Location</b><br>
+              <b>Coordinates:</b> ${lat.toFixed(4)}, ${lon.toFixed(4)}<br>
+              <b>Elevation:</b> ${userElevation.toFixed(1)}m
+            `)
             .openPopup();
 
           setUserLocationMarker(marker);
 
-          // Add 10km radius circle
-          L.circle([lat, lon], {
-            color: '#4285f4',
-            fillColor: 'rgba(66, 133, 244, 0.1)',
-            fillOpacity: 0.2,
-            weight: 2,
-            radius: 10000
-          }).addTo(map);
+          // Check for nearby hazards if data is available
+          if (hazardData.points.length > 0 || hazardData.hotspots.length > 0) {
+            checkProximityAlerts(lat, lon, hazardData.points, hazardData.hotspots);
+          }
 
-          // Generate safe spots
-          console.log("Generating safe spots around your location...");
-          const safeSpots = await generateSafeSpotsAroundLocation(lat, lon, 10, 10);
+          // Load safe spots from backend
+          console.log("Loading safe spots from backend...");
+          const backendData = await loadSafeSpots();
           
-          if (safeSpots.length > 0) {
-            const safeSpotLayerGroup = L.layerGroup();
+          if (backendData) {
+            const { safeSpotData, manifestData } = backendData;
+            const features = safeSpotData.features || [];
             
-            safeSpots.forEach((spot) => {
-              const safeSpotIcon = L.divIcon({
-                className: 'safe-spot-marker',
-                html: `<div style="
-                  width: 16px; 
-                  height: 16px; 
-                  border-radius: 50%; 
-                  background-color: #4CAF50; 
-                  border: 2px solid white; 
-                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                "></div>`,
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
+            // Check if it's a safe elevation message or actual safe spots
+            if (manifestData.stats?.is_safe_elevation && features.length === 1 && features[0].properties?.message === 'safe_elevation') {
+              // User is at safe elevation
+              const safetyInfo = features[0].properties;
+              showElevationNotification({
+                type: 'safe',
+                userElevation: safetyInfo.user_elevation_m,
+                tsunamiLevel: safetyInfo.tsunami_level_m,
+                reason: safetyInfo.reason
+              });
+              
+              // Add green circle to show safe zone
+              L.circle([lat, lon], {
+                color: '#4CAF50',
+                fillColor: 'rgba(76, 175, 80, 0.1)',
+                fillOpacity: 0.2,
+                weight: 2,
+                radius: 5000
+              }).addTo(map);
+              
+            } else if (features.length > 0) {
+              // User needs evacuation - show safe spots
+              const safeSpotLayerGroup = L.layerGroup();
+              
+              features.forEach((feature) => {
+                const props = feature.properties;
+                const coords = feature.geometry.coordinates;
+                
+                const safeSpotIcon = L.divIcon({
+                  className: 'safe-spot-marker',
+                  html: `<div style="
+                    width: 16px; 
+                    height: 16px; 
+                    border-radius: 50%; 
+                    background-color: #4CAF50; 
+                    border: 2px solid white; 
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                  "></div>`,
+                  iconSize: [16, 16],
+                  iconAnchor: [8, 8]
+                });
+
+                L.marker([coords[1], coords[0]], { icon: safeSpotIcon })
+                  .bindPopup(`
+                    <b>🏔️ Safe Evacuation Spot</b><br>
+                    <b>Elevation:</b> ${props.elevation_ft?.toFixed(1)} ft (${props.elevation_m?.toFixed(1)} m)<br>
+                    <b>Above Tsunami Level:</b> +${props.elevation_above_tsunami_m?.toFixed(1)}m<br>
+                    <b>Distance:</b> ${props.distance_km?.toFixed(2)} km<br>
+                    <b>Safety Score:</b> ${props.safety_score?.toFixed(0)}/100<br>
+                    <hr style="margin: 5px 0;">
+                    <small><b>Your elevation:</b> ${props.user_elevation_m?.toFixed(1)}m<br>
+                    <b>Tsunami risk level:</b> ${props.tsunami_level_m}m</small>
+                  `)
+                  .addTo(safeSpotLayerGroup);
               });
 
-              L.marker([spot.lat, spot.lon], { icon: safeSpotIcon })
-                .bindPopup(`
-                  <b>Safe Spot</b><br>
-                  <b>Elevation:</b> ${spot.elevation_ft.toFixed(1)} ft (${spot.elevation_m.toFixed(1)} m)<br>
-                  <b>Distance:</b> ${spot.distance_km.toFixed(2)} km<br>
-                  <b>Safety Score:</b> ${spot.safety_score.toFixed(0)}/100
-                `)
-                .addTo(safeSpotLayerGroup);
-            });
-
-            if (showSafeSpots) {
-              safeSpotLayerGroup.addTo(map);
+              if (showSafeSpots) {
+                safeSpotLayerGroup.addTo(map);
+              }
+              setSafeSpotMarkers(safeSpotLayerGroup);
+              
+              showElevationNotification({
+                type: 'risk',
+                userElevation: features[0].properties.user_elevation_m,
+                tsunamiLevel: features[0].properties.tsunami_level_m,
+                safeSpotCount: features.length
+              });
+              
+              console.log(`Loaded ${features.length} safe spots from backend`);
+              
+              // Add red circle to show risk zone
+              L.circle([lat, lon], {
+                color: '#FF6B6B',
+                fillColor: 'rgba(255, 107, 107, 0.1)',
+                fillOpacity: 0.2,
+                weight: 2,
+                radius: 10000
+              }).addTo(map);
+              
+            } else {
+              alert("No safe spots available in the backend data.");
             }
-            setSafeSpotMarkers(safeSpotLayerGroup);
-            
-            console.log(`Generated ${safeSpots.length} safe spots around your location`);
           } else {
-            console.log("No safe spots found with elevation > 10 feet within 10km");
-            alert("No safe spots with elevation > 10 feet found within 10km of your location.");
+            alert("Failed to load safe spot data from backend.");
           }
 
           map.setView([lat, lon], 12);
@@ -215,6 +367,8 @@ const Map = () => {
   };
 
   useEffect(() => {
+    // Request notification permission on component mount
+    requestNotificationPermission();
     
     const leafletMap = L.map("map").setView([15, 78], 5);
     
@@ -288,18 +442,33 @@ const Map = () => {
     if (USE_GEOJSON) {
       (async () => {
         try {
-          const [pointsRes, clustersRes, hotspotsRes] = await Promise.all([
+          const [pointsRes, clustersRes, hotspotsRes, safeSpotsRes] = await Promise.all([
             fetch("/data/points.geojson"),
             fetch("/data/clusters.geojson"),
             fetch("/data/hotspots.geojson"),
+            fetch("/data/safespots.geojson"),
           ]);
-          const [pointsGj, clustersGj, hotspotsGj] = await Promise.all([
+          const [pointsGj, clustersGj, hotspotsGj, safeSpotsGj] = await Promise.all([
             pointsRes.json(),
             clustersRes.json(),
             hotspotsRes.json(),
+            safeSpotsRes.json(),
           ]);
 
           const features = pointsGj.features || [];
+          const hotspotFeatures = hotspotsGj.features || [];
+          
+          // Store hazard data for proximity checking
+          setHazardData({
+            points: features,
+            hotspots: hotspotFeatures
+          });
+
+          // Check proximity if user location is already available
+          if (userLocation) {
+            checkProximityAlerts(userLocation.lat, userLocation.lon, features, hotspotFeatures);
+          }
+
           const max_count = features.reduce((m, f) => Math.max(m, f.properties?.report_count || 0), 0);
 
           const pointsLayer = L.layerGroup();
@@ -358,10 +527,71 @@ const Map = () => {
             },
           });
 
+          // Safe spots layer
+          const safeSpotsLayer = L.layerGroup();
+          const safeSpotsFeatures = safeSpotsGj.features || [];
+          
+          // Check if it's a safe elevation message or actual safe spots
+          if (safeSpotsFeatures.length === 1 && safeSpotsFeatures[0].properties?.message === 'safe_elevation') {
+            // This is a safe elevation message - show notification temporarily on initial load
+            const safetyInfo = safeSpotsFeatures[0].properties;
+            setElevationStatus({
+              type: 'safe',
+              userElevation: safetyInfo.user_elevation_m,
+              tsunamiLevel: safetyInfo.tsunami_level_m,
+              reason: safetyInfo.reason
+            });
+            setShowNotification(true);
+            
+            // Auto-hide after 7 seconds on initial load (longer for first view)
+            setTimeout(() => {
+              setShowNotification(false);
+            }, 7000);
+            
+            setTimeout(() => {
+              setElevationStatus(null);
+            }, 8000);
+          } else {
+            // These are actual safe spots
+            safeSpotsFeatures.forEach((feature) => {
+              const props = feature.properties;
+              const coords = feature.geometry.coordinates;
+              
+              if (props && coords && props.lat && props.lon) {
+                const safeSpotIcon = L.divIcon({
+                  className: 'safe-spot-marker',
+                  html: `<div style="
+                    width: 14px; 
+                    height: 14px; 
+                    border-radius: 50%; 
+                    background-color: #4CAF50; 
+                    border: 2px solid white; 
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                  "></div>`,
+                  iconSize: [14, 14],
+                  iconAnchor: [7, 7]
+                });
+
+                L.marker([coords[1], coords[0]], { icon: safeSpotIcon })
+                  .bindPopup(`
+                    <b>🏔️ Safe Spot</b><br>
+                    <b>Elevation:</b> ${props.elevation_ft?.toFixed(1)} ft (${props.elevation_m?.toFixed(1)} m)<br>
+                    <b>Above Tsunami Level:</b> +${props.elevation_above_tsunami_m?.toFixed(1)}m<br>
+                    <b>Distance:</b> ${props.distance_km?.toFixed(2)} km<br>
+                    <b>Safety Score:</b> ${props.safety_score?.toFixed(0)}/100
+                  `)
+                  .addTo(safeSpotsLayer);
+              }
+            });
+          }
+
           if (showHeat) heatLayer.addTo(leafletMap);
           if (showPoints) pointsLayer.addTo(leafletMap);
           if (showDbscan) dbscanLayer.addTo(leafletMap);
           if (showHotspots) hotspotsLayer.addTo(leafletMap);
+          if (showSafeSpots) safeSpotsLayer.addTo(leafletMap);
+          
+          setSafeSpotMarkers(safeSpotsLayer);
 
           if (latlngs.length) {
             const bounds = L.latLngBounds(latlngs);
@@ -541,6 +771,35 @@ const Map = () => {
         .addTo(hotspotsLayer);
     });
 
+    // Store generated hazard data for proximity checking
+    const fallbackHazardData = hazardPoints.map(p => ({
+      geometry: {
+        type: "Point",
+        coordinates: [p.lon, p.lat]
+      },
+      properties: {
+        report_count: p.report_count,
+        group_id: p.group_id
+      }
+    }));
+    
+    const fallbackHotspotData = hotspots.map(({p,i}) => ({
+      geometry: {
+        type: "Point", 
+        coordinates: [p.lon, p.lat]
+      },
+      properties: {
+        report_count: p.report_count,
+        GiZ: zScores[i],
+        GiP: zScores[i] > 1.5 ? 0.05 : 0.5
+      }
+    }));
+
+    setHazardData({
+      points: fallbackHazardData,
+      hotspots: fallbackHotspotData
+    });
+
     // Initial visibility based on toggle state
     if (showHeat) {
       heatLayer.addTo(leafletMap);
@@ -603,10 +862,97 @@ const Map = () => {
     }
   }, [showSafeSpots, map, safeSpotMarkers]);
 
+  // Reset proximity alert flag when user moves significantly (5 minutes cooldown)
+  useEffect(() => {
+    if (userLocation && proximityAlertShown) {
+      const timer = setTimeout(() => {
+        setProximityAlertShown(false);
+      }, 5 * 60 * 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [userLocation, proximityAlertShown]);
+
   return (
     <div style={{ position: "relative", height: "calc(100vh - 200px)", width: "100%" }}>
+      
+      {/* Elevation Status Notification */}
+      {elevationStatus && (
+        <div style={{
+          position: "absolute",
+          top: "10px",
+          left: "10px",
+          backgroundColor: elevationStatus.type === 'safe' ? '#4CAF50' : '#FF9800',
+          color: 'white',
+          padding: "16px 20px",
+          borderRadius: "12px",
+          boxShadow: "0 6px 16px rgba(0,0,0,0.4)",
+          zIndex: 2000,
+          maxWidth: "350px",
+          fontSize: "15px",
+          fontWeight: "500",
+          transform: showNotification ? 'translateY(0)' : 'translateY(-100%)',
+          opacity: showNotification ? 1 : 0,
+          transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+          border: `2px solid ${elevationStatus.type === 'safe' ? '#388E3C' : '#F57C00'}`,
+          backdropFilter: 'blur(8px)',
+          background: elevationStatus.type === 'safe' 
+            ? 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)' 
+            : 'linear-gradient(135deg, #FF9800 0%, #FFB74D 100%)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              {elevationStatus.type === 'safe' ? (
+                <>
+                  <div style={{ fontWeight: 'bold', marginBottom: '6px', fontSize: '16px' }}>✅ Safe Elevation</div>
+                  <div style={{ marginBottom: '3px' }}>Your elevation: <strong>{elevationStatus.userElevation.toFixed(1)}m</strong></div>
+                  <div style={{ marginBottom: '6px' }}>Tsunami level: <strong>{elevationStatus.tsunamiLevel}m</strong></div>
+                  <div style={{ fontSize: '13px', opacity: 0.95, fontStyle: 'italic' }}>
+                    No evacuation needed
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontWeight: 'bold', marginBottom: '6px', fontSize: '16px' }}>⚠️ Tsunami Risk Zone</div>
+                  <div style={{ marginBottom: '3px' }}>Your elevation: <strong>{elevationStatus.userElevation.toFixed(1)}m</strong></div>
+                  <div style={{ marginBottom: '6px' }}>Tsunami level: <strong>{elevationStatus.tsunamiLevel}m</strong></div>
+                  <div style={{ fontSize: '13px', opacity: 0.95, fontStyle: 'italic' }}>
+                    {elevationStatus.safeSpotCount} safe spots found nearby
+                  </div>
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                setShowNotification(false);
+                setTimeout(() => setElevationStatus(null), 400);
+              }}
+              style={{
+                background: 'rgba(255,255,255,0.2)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '24px',
+                height: '24px',
+                color: 'white',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '14px',
+                marginLeft: '12px',
+                flexShrink: 0,
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={(e) => e.target.style.background = 'rgba(255,255,255,0.3)'}
+              onMouseLeave={(e) => e.target.style.background = 'rgba(255,255,255,0.2)'}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
-      {/* Find Safe Spots Button */}
+      {/* Find Safe Spots Button - Enhanced with proximity check */}
       <button
         onClick={getUserLocationWithSafeSpots}
         style={{
@@ -624,9 +970,9 @@ const Map = () => {
           fontSize: "14px",
           fontWeight: "600",
         }}
-        title="Find safe spots around your location (elevation > 10ft within 10km)"
+        title="Find safe spots and check for hazards within 50km of your location"
       >
-        🛡️ Find Safe Spots
+        🛡️ Find Safe Spots + Check Hazards
       </button>
 
       {/* Layer controls - Mobile responsive dropdown */}
@@ -694,7 +1040,6 @@ const Map = () => {
           </li>
         </ul>
       </div>
-
 
       {/* Fullscreen map */}
       <div
