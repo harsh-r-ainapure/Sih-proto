@@ -142,6 +142,35 @@ app.get("/reports", async (req, res) => {
   }
 });
 
+// Proxy Sarvam translate to avoid CORS and keep key server-side
+app.post("/sarvam-translate", async (req, res) => {
+  try {
+    const apiKey = process.env.SARVAM_API_KEY || process.env.VITE_SARVAM_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ message: "Missing SARVAM_API_KEY on server" });
+    }
+    const body = req.body || {};
+    const r = await fetch("https://api.sarvam.ai/translate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await r.text();
+    let json;
+    try { json = JSON.parse(text); } catch { json = { raw: text }; }
+    if (!r.ok) {
+      return res.status(r.status).json({ message: "Sarvam proxy error", status: r.status, data: json });
+    }
+    res.json(json);
+  } catch (e) {
+    console.error("/sarvam-translate error:", e);
+    res.status(500).json({ message: "Unexpected proxy error", details: String(e) });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

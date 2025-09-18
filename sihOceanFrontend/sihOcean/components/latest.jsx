@@ -1,10 +1,12 @@
 import { useContext, useState, useEffect } from "react";
 import { valueContext } from "../counter/counter";
-import { t } from "../src/utils/i18n";
+import { t, translateText, guessLang } from "../src/utils/i18n";
 
 const Latest = () => {
   const { currentLang, setOption } = useContext(valueContext);
   const [incidents, setIncidents] = useState([]);
+  const [translated, setTranslated] = useState({}); // cache by id+lang
+  const [txState, setTxState] = useState({}); // {"id:lang": {status:'idle|loading|ok|error', error?:string}}
 
   // Fetch latest incidents from backend and auto-refresh
   useEffect(() => {
@@ -22,6 +24,8 @@ const Latest = () => {
           severityLabel: Number(it.severity) >= 4 ? "HIGH" : Number(it.severity) === 3 ? "MEDIUM" : "LOW",
         }));
         setIncidents(mapped);
+        // trigger translation for current language
+        queueTranslations(mapped, currentLang);
       } catch (e) {
         console.error("Failed to fetch incidents:", e);
       }
@@ -30,6 +34,55 @@ const Latest = () => {
     timer = setInterval(fetchIncidents, 15000); // refresh every 15s
     return () => clearInterval(timer);
   }, []);
+
+  // re-translate when language changes
+  useEffect(() => {
+    if (!incidents.length) return;
+    queueTranslations(incidents, currentLang);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLang]);
+
+  const queueTranslations = async (items, lang) => {
+    const tasks = [];
+    for (const it of items) {
+      const key = `${it.id}:${lang}`;
+      if (translated[key]) continue;
+      // show spinner immediately
+      setTxState((prev) => ({ ...prev, [key]: { status: 'loading' } }));
+
+      const srcDesc = guessLang(it.description || "");
+      const srcShort = guessLang(it.disaster || "");
+
+      tasks.push((async () => {
+        try {
+          const [desc, short] = await Promise.all([
+            translateText(it.description || "", srcDesc, lang),
+            translateText(it.disaster || "", srcShort, lang),
+          ]);
+          setTranslated((prev) => ({ ...prev, [key]: { description: desc, disaster: short } }));
+          setTxState((prev) => ({ ...prev, [key]: { status: 'ok' } }));
+        } catch (e) {
+          setTxState((prev) => ({ ...prev, [key]: { status: 'error', error: String(e?.message || e) } }));
+        }
+      })());
+    }
+    if (tasks.length) {
+      try { await Promise.allSettled(tasks); } catch {}
+    }
+  };
+
+  const retryTranslate = async (incident) => {
+    const key = `${incident.id}:${currentLang}`;
+    setTxState((prev) => ({ ...prev, [key]: { status: 'loading' } }));
+    try {
+      const desc = await translateText(incident.description || "", guessLang(incident.description || ""), currentLang);
+      const short = await translateText(incident.disaster || "", guessLang(incident.disaster || ""), currentLang);
+      setTranslated((prev) => ({ ...prev, [key]: { description: desc, disaster: short } }));
+      setTxState((prev) => ({ ...prev, [key]: { status: 'ok' } }));
+    } catch (e) {
+      setTxState((prev) => ({ ...prev, [key]: { status: 'error', error: String(e?.message || e) } }));
+    }
+  };
 
   const getSeverityColor = (sev) => {
     const s = typeof sev === "string" ? sev.toUpperCase() : (sev >= 4 ? "HIGH" : sev === 3 ? "MEDIUM" : "LOW");
@@ -118,7 +171,18 @@ const Latest = () => {
                   }}>
                     {incident.severityLabel || incident.severity}
                   </span>
-                  <span style={{ fontSize: "0.9rem", color: "#666" }}>{incident.disaster}</span>
+                  <span style={{ fontSize: "0.9rem", color: "#666", display:'inline-flex', alignItems:'center', gap:6 }}>
+                    {translated[`${incident.id}:${currentLang}`]?.disaster || incident.disaster}
+                    {txState[`${incident.id}:${currentLang}`]?.status === 'loading' && (
+                      <span className="spinner" title="Translating..." style={{ display:'inline-block', width:14, height:14, border:'2px solid #ccc', borderTopColor:'#007BFF', borderRadius:'50%', animation:'spin 1s linear infinite' }} />
+                    )}
+                    {txState[`${incident.id}:${currentLang}`]?.status === 'error' && (
+                      <>
+                        <span title={txState[`${incident.id}:${currentLang}`]?.error || 'Translation failed'} style={{ color:'#d9534f', fontSize:12 }}>⚠</span>
+                        <button onClick={() => retryTranslate(incident)} style={{ marginLeft:6, padding:'2px 6px', fontSize:11, borderRadius:4, border:'1px solid #ccc', background:'#f8f9fa' }}>Retry</button>
+                      </>
+                    )}
+                  </span>
                 </div>
               </div>
               <button 
@@ -154,8 +218,11 @@ const Latest = () => {
               </div>
             ) : null}
 
-            <p style={{ fontSize: "0.95rem", color: "#444", marginBottom: "15px" }}>
-              {incident.description}
+            <p style={{ fontSize: "0.95rem", color: "#444", marginBottom: "15px", position:'relative' }}>
+              {translated[`${incident.id}:${currentLang}`]?.description || incident.description}
+              {txState[`${incident.id}:${currentLang}`]?.status === 'loading' && (
+                <span className="spinner" title="Translating..." style={{ position:'absolute', right:0, top:-6, width:14, height:14, border:'2px solid #ccc', borderTopColor:'#007BFF', borderRadius:'50%', animation:'spin 1s linear infinite' }} />
+              )}
             </p>
 
             <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #eee", paddingTop: "15px" }}>

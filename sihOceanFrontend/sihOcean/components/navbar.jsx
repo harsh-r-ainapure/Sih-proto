@@ -4,6 +4,14 @@ import { t } from "../src/utils/i18n";
 
 const Navbar = ({ onclickhome, onclickform, onclickinsta, onclickreddit, onclicklatest, theme = "light", onToggleTheme }) => {
   const { currentLang } = useContext(valueContext);
+  
+  // Diagnostics: quick ping to show SARVAM proxy status (dev only)
+  // window.__sarvamDiag = async () => {
+  //   try {
+  //     const res = await fetch((import.meta.env.VITE_API_BASE||'') + '/sarvam-translate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ input:'Hello', source_language:'en', target_language:'hi' }) });
+  //     console.log('Diag /sarvam-translate', res.status, await res.text());
+  //   } catch(e) { console.error('Diag error', e); }
+  // };
   const [searchQuery, setSearchQuery] = useState("");
 
   const searchLocation = async (query) => {

@@ -567,35 +567,44 @@ export async function translateText(text, from, to) {
   const tgt = normalizeLang(to);
   if (!text || src === tgt) return text;
 
-  const apiKey = import.meta.env.VITE_SARVAM_API_KEY;
-  if (!apiKey) {
-    console.warn("Missing VITE_SARVAM_API_KEY; returning original text.");
-    return text;
-  }
-
   const body = {
     input: text,
     source_language: src,
     target_language: tgt,
   };
 
+  // Prefer proxy to avoid CORS and keep key server-side
+  const base = import.meta.env.VITE_API_BASE || "";
   try {
-    const res = await fetch("https://api.sarvam.ai/translate", {
+    const res = await fetch(`${base}/sarvam-translate`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      console.warn("Sarvam translate failed", res.status);
+      const errText = await res.text().catch(() => "");
+      console.warn("Sarvam proxy failed", res.status, errText);
       return text;
     }
     const data = await res.json();
-    return data.translated_text || text;
+    // Defensive: accept either translated_text or nested data
+    const out = data.translated_text || data.output || data.text || text;
+    if (typeof out !== "string") return text;
+    return sanitizeTranslated(out);
   } catch (e) {
     console.warn("Sarvam translate error", e);
     return text;
+  }
+}
+
+// Basic cleanup for unexpected HTML/entities from APIs
+function sanitizeTranslated(s) {
+  try {
+    // Strip simple HTML tags
+    const noTags = s.replace(/<[^>]+>/g, "");
+    // Collapse whitespace
+    return noTags.replace(/\s+/g, " ").trim();
+  } catch {
+    return s;
   }
 }
