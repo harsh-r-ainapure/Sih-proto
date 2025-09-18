@@ -901,7 +901,7 @@ const Map = () => {
   }, [userLocation, proximityAlertShown]);
 
   return (
-    <div style={{ position: "relative", height: "calc(100vh - 200px)", width: "100%" }}>
+    <div style={{ position: "relative", height: "100%", width: "100%" }}>
       
       {/* Elevation Status Notification */}
       {elevationStatus && (
@@ -1072,7 +1072,7 @@ const Map = () => {
       <div
         id="map"
         style={{
-          height: "calc(100vh - 200px)",
+          height: "100%",
           width: "100%",
           position: "absolute",
           top: 0,
