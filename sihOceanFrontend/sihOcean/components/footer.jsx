@@ -4,7 +4,8 @@ import { useContext } from "react";
 import { valueContext } from "../counter/counter";
 import { getSupportedLangs, persistLang, t } from "../src/utils/i18n";
 
-const Footer = ({ onclickmypost }) => {
+// Footer with minimal theme switcher (bottom-left) and vertically centered language switcher (right)
+const Footer = ({ onclickmypost, theme = "light", onToggleTheme = () => {} }) => {
   const { currentLang, setCurrentLang } = useContext(valueContext);
   const langs = getSupportedLangs();
 
@@ -13,225 +14,247 @@ const Footer = ({ onclickmypost }) => {
     try { persistLang(code); } catch (_) {}
   };
 
+  const isDark = theme === "dark";
+
+  const themeButtonStyle = {
+    position: "absolute",
+    left: 16,
+    top: "50%",
+    transform: "translateY(-50%)",
+    fontSize: 12,
+    padding: "6px 10px",
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.35)",
+    background: "rgba(255,255,255,0.15)",
+    color: "#fff",
+    backdropFilter: "blur(4px)",
+  };
+
+  const langDropdownWrapperStyle = {
+    position: "absolute",
+    right: 16,
+    top: "50%",
+    transform: "translateY(-50%)",
+    zIndex: 1001,
+  };
+
+  const langButtonStyle = {
+    fontSize: 12,
+    padding: "6px 10px",
+    borderRadius: 6,
+    border: "1px solid #ddd",
+    backgroundColor: "white",
+    color: "#333",
+    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+  };
+
   return (
     <>
       {/* Desktop Footer */}
       <footer
-      style={{
-        position: "fixed",
-        bottom: 0,
-        left: 0,
-        width: "100%",
-        backgroundColor: "#007BFF",
-        color: "white",
-        padding: "10px 0",
-        borderTop: "2px solid #0056b3",
-        boxShadow: "0 -2px 8px rgba(0, 0, 0, 0.1)",
-        textAlign: "center",
-        zIndex: 1000,
-      }}
-      className="d-none d-md-block"
-    >
-      {/* Navigation Links - Mobile responsive */}
-      <ul
         style={{
-          display: "flex",
-          justifyContent: "center",
-          listStyleType: "none",
-          margin: 0,
-          padding: 0,
-          borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
-          paddingBottom: "10px",
-          marginBottom: "10px",
-          flexWrap: "wrap",
-          gap: "5px",
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          width: "100%",
+          backgroundColor: "#007BFF",
+          color: "white",
+          padding: "10px 0",
+          borderTop: "2px solid #0056b3",
+          boxShadow: "0 -2px 8px rgba(0, 0, 0, 0.1)",
+          textAlign: "center",
+          zIndex: 1000,
+        }}
+        className="d-none d-md-block"
+      >
+        {/* Top row: links centered; theme and language aligned left/right but vertically centered */}
+        <div style={{ position: "relative" }}>
+          {/* Navigation Links */}
+          <ul
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              listStyleType: "none",
+              margin: 0,
+              padding: 0,
+              borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
+              paddingBottom: "10px",
+              marginBottom: "10px",
+              flexWrap: "wrap",
+              gap: "5px",
+            }}
+          >
+          <li style={{ margin: "0 5px" }}>
+            <a
+              href="#"
+              style={{
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 500,
+                transition: "color 0.3s ease",
+                fontSize: 14,
+              }}
+              onMouseOver={(e) => (e.target.style.color = "#FFD700")}
+              onMouseOut={(e) => (e.target.style.color = "white")}
+              onClick={() => onclickmypost()}
+            >
+              {t("footer_my_posts", currentLang)}
+            </a>
+          </li>
+          <li style={{ margin: "0 5px" }}>
+            <a
+              href="#"
+              style={{
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 500,
+                transition: "color 0.3s ease",
+                fontSize: 14,
+              }}
+              onMouseOver={(e) => (e.target.style.color = "#FFD700")}
+              onMouseOut={(e) => (e.target.style.color = "white")}
+            >
+              {t("footer_faqs", currentLang)}
+            </a>
+          </li>
+          <li style={{ margin: "0 5px" }}>
+            <a
+              href="#"
+              style={{
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 500,
+                transition: "color 0.3s ease",
+                fontSize: 14,
+              }}
+              onMouseOver={(e) => (e.target.style.color = "#FFD700")}
+              onMouseOut={(e) => (e.target.style.color = "white")}
+            >
+              {t("footer_about", currentLang)}
+            </a>
+          </li>
+        </ul>
+
+          {/* Theme toggle - left, vertically centered with top row */}
+          <button
+            type="button"
+            aria-label="Toggle theme"
+            title={`Switch to ${isDark ? "light" : "dark"} mode`}
+            onClick={onToggleTheme}
+            style={themeButtonStyle}
+          >
+            {isDark ? "☀️ Light" : "🌙 Dark"}
+          </button>
+
+          {/* Language dropdown - right, vertically centered with top row */}
+          <div className="dropdown" style={langDropdownWrapperStyle}>
+            <button
+              className="btn btn-light dropdown-toggle"
+              type="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+              title={t("language", currentLang)}
+              style={langButtonStyle}
+            >
+              🌐 {langs[currentLang]?.label || currentLang.toUpperCase()}
+            </button>
+            <ul className="dropdown-menu dropdown-menu-end" style={{ minWidth: 120 }}>
+              {Object.entries(langs).map(([code, meta]) => (
+                <li key={code}>
+                  <button
+                    className="dropdown-item"
+                    onClick={() => changeLang(code)}
+                    style={{
+                      fontSize: 14,
+                      padding: "8px 12px",
+                      backgroundColor: currentLang === code ? "#f8f9fa" : "transparent",
+                    }}
+                  >
+                    {meta.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* Copyright */}
+        <p style={{ margin: 0, fontSize: 14 }}>© 2025 GEN-NOVA, Inc</p>
+      </footer>
+
+      {/* Mobile Compact Footer */}
+      <footer
+        className="d-md-none"
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          width: "100%",
+          backgroundColor: "#007BFF",
+          color: "white",
+          padding: "8px 0",
+          borderTop: "1px solid #0056b3",
+          boxShadow: "0 -2px 8px rgba(0, 0, 0, 0.1)",
+          textAlign: "center",
+          zIndex: 1000,
         }}
       >
-        <li style={{ margin: "0 5px" }}>
+        {/* Minimal Theme Toggle - bottom-left of mobile footer */}
+        <button
+          type="button"
+          aria-label="Toggle theme"
+          title={`Switch to ${isDark ? "light" : "dark"} mode`}
+          onClick={onToggleTheme}
+          style={{ ...themeButtonStyle, left: 12, padding: "6px 8px", fontSize: 11 }}
+        >
+          {isDark ? "☀️" : "🌙"}
+        </button>
+
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "15px" }}>
           <a
             href="#"
-            style={{
-              color: "white",
-              textDecoration: "none",
-              fontWeight: "500",
-              transition: "color 0.3s ease",
-              fontSize: "14px",
-            }}
-            onMouseOver={(e) => (e.target.style.color = "#FFD700")}
-            onMouseOut={(e) => (e.target.style.color = "white")}
+            style={{ color: "white", textDecoration: "none", fontSize: 12, fontWeight: 500 }}
             onClick={() => onclickmypost()}
           >
             {t("footer_my_posts", currentLang)}
           </a>
-        </li>
-        <li style={{ margin: "0 5px" }}>
+          <span style={{ color: "rgba(255,255,255,0.5)" }}>|</span>
           <a
             href="#"
-            style={{
-              color: "white",
-              textDecoration: "none",
-              fontWeight: "500",
-              transition: "color 0.3s ease",
-              fontSize: "14px",
-            }}
-            onMouseOver={(e) => (e.target.style.color = "#FFD700")}
-            onMouseOut={(e) => (e.target.style.color = "white")}
-          >
-            {t("footer_faqs", currentLang)}
-          </a>
-        </li>
-        <li style={{ margin: "0 5px" }}>
-          <a
-            href="#"
-            style={{
-              color: "white",
-              textDecoration: "none",
-              fontWeight: "500",
-              transition: "color 0.3s ease",
-              fontSize: "14px",
-            }}
-            onMouseOver={(e) => (e.target.style.color = "#FFD700")}
-            onMouseOut={(e) => (e.target.style.color = "white")}
+            style={{ color: "white", textDecoration: "none", fontSize: 12, fontWeight: 500 }}
           >
             {t("footer_about", currentLang)}
           </a>
-        </li>
+        </div>
 
-        {/* Social Media Dropdown */}
-        <li className="nav-item dropdown">
+        {/* Language dropdown - vertically centered inside mobile footer (right) */}
+        <div className="dropdown" style={{ ...langDropdownWrapperStyle, right: 12 }}>
           <button
-            className="nav-link btn btn-link dropdown-toggle"
-            style={{
-              color: "white",
-              fontWeight: "500",
-              marginRight: "10px",
-              textDecoration: "none",
-            }}
+            className="btn btn-light dropdown-toggle"
+            type="button"
             data-bs-toggle="dropdown"
             aria-expanded="false"
-            onMouseOver={(e) => (e.target.style.color = "#FFD700")}
-            onMouseOut={(e) => (e.target.style.color = "white")}
+            title={t("language", currentLang)}
+            style={{ ...langButtonStyle, fontSize: 11, padding: "6px 8px" }}
           >
-            {t("footer_settings", currentLang)}
+            🌐 {langs[currentLang]?.label || currentLang.toUpperCase()}
           </button>
-          <ul className="dropdown-menu">
-            {["Dark"].map((platform, index) => (
-              <li key={index}>
+          <ul className="dropdown-menu dropdown-menu-end" style={{ minWidth: 120 }}>
+            {Object.entries(langs).map(([code, meta]) => (
+              <li key={code}>
                 <button
-                  className="dropdown-item btn btn-link"
-                  style={{
-                    color: "black",
-                    fontWeight: "500",
-                    textDecoration: "none",
-                    backgroundColor: "orange",
-                  }}
-                  onMouseOver={(e) => (e.target.style.color = "black")}
-                  onMouseOut={(e) => (e.target.style.color = "gray")}
-                  onClick={() => {}}
+                  className="dropdown-item"
+                  onClick={() => changeLang(code)}
+                  style={{ fontSize: 14, padding: "8px 12px", backgroundColor: currentLang === code ? "#f8f9fa" : "transparent" }}
                 >
-                  {platform}
+                  {meta.label}
                 </button>
               </li>
             ))}
           </ul>
-        </li>
-      </ul>
-
-      {/* Language dropdown - Mobile responsive */}
-      <div
-        className="dropdown"
-        style={{
-          position: "fixed",
-          right: "16px",
-          bottom: "55px",
-          zIndex: 1001,
-        }}
-      >
-        <button
-          className="btn btn-light dropdown-toggle"
-          type="button"
-          data-bs-toggle="dropdown"
-          aria-expanded="false"
-          title={t("language", currentLang)}
-          style={{
-            fontSize: "12px",
-            padding: "6px 10px",
-            borderRadius: "6px",
-            border: "1px solid #ddd",
-            backgroundColor: "white",
-            color: "#333",
-            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-          }}
-        >
-          🌐 {langs[currentLang]?.label || currentLang.toUpperCase()}
-        </button>
-        <ul className="dropdown-menu dropdown-menu-end" style={{ minWidth: "120px" }}>
-          {Object.entries(langs).map(([code, meta]) => (
-            <li key={code}>
-              <button 
-                className="dropdown-item" 
-                onClick={() => changeLang(code)}
-                style={{
-                  fontSize: "14px",
-                  padding: "8px 12px",
-                  backgroundColor: currentLang === code ? "#f8f9fa" : "transparent",
-                }}
-              >
-                {meta.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Copyright */}
-      <p style={{ margin: 0, fontSize: "14px" }}>© 2025 GEN-NOVA, Inc</p>
-    </footer>
-
-    {/* Mobile Compact Footer */}
-    <footer
-      className="d-md-none"
-      style={{
-        position: "fixed",
-        bottom: 0,
-        left: 0,
-        width: "100%",
-        backgroundColor: "#007BFF",
-        color: "white",
-        padding: "8px 0",
-        borderTop: "1px solid #0056b3",
-        boxShadow: "0 -2px 8px rgba(0, 0, 0, 0.1)",
-        textAlign: "center",
-        zIndex: 1000,
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "15px" }}>
-        <a
-          href="#"
-          style={{
-            color: "white",
-            textDecoration: "none",
-            fontSize: "12px",
-            fontWeight: "500",
-          }}
-          onClick={() => onclickmypost()}
-        >
-          {t("footer_my_posts", currentLang)}
-        </a>
-        <span style={{ color: "rgba(255,255,255,0.5)" }}>|</span>
-        <a
-          href="#"
-          style={{
-            color: "white",
-            textDecoration: "none",
-            fontSize: "12px",
-            fontWeight: "500",
-          }}
-        >
-          {t("footer_about", currentLang)}
-        </a>
-      </div>
-    </footer>
+        </div>
+      </footer>
     </>
   );
 };

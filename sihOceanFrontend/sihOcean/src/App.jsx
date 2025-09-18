@@ -160,7 +160,11 @@ function App() {
         currentLang={currentLang}
       />
 
-      <Footer onclickmypost={onclickmypost} />
+      <Footer
+        onclickmypost={onclickmypost}
+        theme={theme}
+        onToggleTheme={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+      />
     </valueContext.Provider>
   );
 }
